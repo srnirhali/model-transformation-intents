@@ -1,0 +1,144 @@
+module UmlActivityDiagram2MSProject;
+
+create OUT : MSProject from IN : UML;
+
+
+
+
+
+
+
+helper def: curId : Integer = 0;
+
+
+
+helper def: getId() : String =
+
+	thisModule.refSetValue('curId', thisModule.curId + 1).curId.toString();
+
+
+
+
+
+helper context UML!StateVertex def: getPredecessors() : Set(UML!StateVertex) =
+
+	let trans : Set(UML!StateVertex) = self.incoming in
+
+	
+
+	if trans.isEmpty() then
+
+		Set{}
+
+	else trans->collect(t | t.source)
+
+			->iterate(e; ret : Set(UML!StateVertex) = Sequence{} |
+
+				if e.oclIsKindOf(UML!ActionState) then
+
+					ret->including(e)
+
+				else
+
+					if e.oclIsKindOf(UML!Pseudostate) then
+
+						if e.kind = #pk_initial then
+
+							ret->including(e)
+
+						else
+
+							ret->including(e.getPredecessors())
+
+						endif
+
+					else
+
+						ret
+
+					endif
+
+				endif 
+
+			)
+
+	endif;
+
+
+
+
+
+
+
+
+
+rule Main {
+
+	from
+
+		s : UML!StateMachine
+
+	to 
+
+		pro : MSProject!MSProject (
+
+			tasks <- UML!StateVertex.allInstances()
+
+		)
+
+}
+
+
+
+rule Pseudostate {
+
+	from
+
+		s : UML!Pseudostate (
+
+				s.kind = #pk_initial
+
+		)
+
+	to 
+
+		t : MSProject!Task (
+
+			UID <- thisModule.getId(),
+
+			name <- s.name,
+
+			predecessors <- Set{}
+
+		)
+
+}
+
+
+
+rule StateVertex {
+
+	from
+
+		s : UML!StateVertex (
+
+				s.oclIsKindOf(UML!FinalState)
+
+				or s.oclIsKindOf(UML!ActionState)
+
+		)
+
+	to 
+
+		t : MSProject!Task (
+
+			UID <- thisModule.getId(),
+
+			name <- s.name,
+
+			predecessors <- s.getPredecessors()
+
+		)
+
+}
+

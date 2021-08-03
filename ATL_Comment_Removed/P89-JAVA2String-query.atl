@@ -1,0 +1,18 @@
+query JAVA2String_query = JAVA!JavaClass.allInstances()->
+
+	select(e | e.oclIsTypeOf(JAVA!JavaClass))->
+
+	collect(x | x.toString().writeTo('C:/test/' + x.package.name.replaceAll('.', '/') + '/' + x.name + '.java'));
+
+
+
+uses JAVA2String;
+
+
+
+
+
+
+
+
+

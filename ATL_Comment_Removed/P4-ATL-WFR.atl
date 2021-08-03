@@ -1,0 +1,1244 @@
+module ATL_WFR;
+
+create OUT : Problem from IN : ATL;
+
+
+
+
+
+
+
+helper def: singleIteratorExps : Set(String) =
+
+	Set{
+
+		'isUnique', 'any', 'one', 'collect', 'select',
+
+		'reject', 'collectNested', 'sortedBy'
+
+	};
+
+
+
+
+
+helper def: multiIteratorExps : Set(String) = Set{'exists', 'forAll'};
+
+
+
+
+
+helper def: collectionTypes : Set(ATL!CollectionType) =
+
+	ATL!CollectionType.allInstances();
+
+
+
+
+
+helper def: allModels : Sequence(ATL!OclModel) =
+
+	let atlModule : ATL!Module =
+
+		ATL!Module.allInstances()->asSequence()->first()
+
+	in
+
+	Sequence{
+
+		atlModule.inModels,
+
+		atlModule.outModels
+
+	}->flatten();
+
+
+
+
+
+helper def: queryElt : ATL!Query =
+
+	ATL!Query.allInstances()->asSequence()->first();
+
+
+
+
+
+helper def: allBindings : Sequence(ATL!Binding) =
+
+	ATL!Binding.allInstances()->asSequence();
+
+
+
+
+
+helper def: allInPatterns : Sequence(ATL!InPattern) =
+
+	ATL!InPattern.allInstances()->asSequence();
+
+
+
+
+
+helper def: allInPatternElts : Sequence(ATL!InPatternElement) =
+
+	ATL!InPatternElement.allInstances()->asSequence();
+
+
+
+
+
+helper def: allOutPatternElts : Sequence(ATL!OutPatternElement) =
+
+	ATL!OutPatternElement.allInstances()->asSequence();
+
+
+
+
+
+helper def: allRules : Sequence(ATL!Rule) =
+
+	ATL!Rule.allInstances()->asSequence();
+
+
+
+
+
+helper def: allHelpers : Sequence(ATL!Helper) =
+
+	ATL!Helper.allInstances()->asSequence();
+
+
+
+
+
+helper def: allLoopExps : Sequence(ATL!LoopExp) =
+
+	ATL!LoopExp.allInstances()->asSequence();
+
+
+
+
+
+helper def: allIterateExps : Sequence(ATL!IterateExp) =
+
+	ATL!IterateExp.allInstances()->asSequence();
+
+
+
+
+
+helper context ATL!Rule
+
+	def: namedElements : Sequence(ATL!VariableDeclaration) =
+
+	Sequence{
+
+		if self.oclIsTypeOf(ATL!MatchedRule)
+
+		then
+
+			self.inPattern.elements->asSequence()
+
+		else
+
+			Sequence{}
+
+		endif,
+
+		self.variables->asSequence(),
+
+		self.outPattern.elements->asSequence()
+
+	}->flatten();
+
+
+
+
+
+helper context ATL!PatternElement def: "rule" : ATL!Rule =
+
+	if self.oclIsKindOf(ATL!OutPatternElement)
+
+	then
+
+		self.outPattern."rule"
+
+	else
+
+		self.inPattern."rule"
+
+	endif;
+
+
+
+
+
+helper context ATL!VariableDeclaration def: immediateComposite : ATL!Element =
+
+	if not self.letExp.oclIsUndefined() then
+
+		self.letExp
+
+	else if not self.baseExp.oclIsUndefined() then
+
+		self.baseExp
+
+	else if thisModule.allInPatternElts->exists(e | e = self) then
+
+		thisModule.allInPatternElts->select(e | e = self)->first().inPattern
+
+	else if thisModule.allOutPatternElts->exists(e | e = self) then
+
+		thisModule.allOutPatternElts->select(e | e = self)->first().outPattern
+
+	else if thisModule.allLoopExps
+
+				->exists(l | l.iterators->exists(e | self = e))	then
+
+		thisModule.allLoopExps
+
+			->select(l | l.iterators->exists(e | self = e))->first()
+
+	else if thisModule.allIterateExps->exists(e | self = e.result) then
+
+		thisModule.allIterateExps->select(e | self = e.result)->first()
+
+	else if thisModule.allRules
+
+				->exists(r | r.variables->exists(e | self = e)) then
+
+		thisModule.allRules
+
+			->select(r | r.variables->exists(e | self = e))
+
+			->first()
+
+	else OclUndefined
+
+	endif endif	endif endif endif endif endif;
+
+
+
+
+
+helper context ATL!OclExpression def: immediateComposite : ATL!Element =
+
+	if not self.ifExp1.oclIsUndefined() then self.ifExp1
+
+	else if not self.ifExp2.oclIsUndefined() then self.ifExp2
+
+	else if not self.ifExp3.oclIsUndefined() then self.ifExp3
+
+	else if not self."attribute".oclIsUndefined() then self."attribute"
+
+	else if not self."operation".oclIsUndefined() then self."operation"
+
+	else if not self.initializedVariable.oclIsUndefined()
+
+		then self.initializedVariable
+
+	else if not self.parentOperation.oclIsUndefined() then self.parentOperation
+
+	else if not self.loopExp.oclIsUndefined() then self.loopExp
+
+	else if not self.letExp.oclIsUndefined() then self.letExp
+
+	else if not self.collection.oclIsUndefined() then self.collection
+
+	else if not self.appliedProperty.oclIsUndefined() then self.appliedProperty
+
+	else if thisModule.allInPatterns->exists(e | e.filter = self)
+
+		then thisModule.allInPatterns->select(e | e.filter = self)->first()
+
+	else if thisModule.allBindings->exists(e | e.value = self)
+
+		then thisModule.allBindings->select(e | e.value = self)->first()
+
+	else
+
+		if not thisModule.queryElt.oclIsUndefined()
+
+		then
+
+			if thisModule.queryElt.body = self
+
+			then
+
+				thisModule.queryElt
+
+			else
+
+				OclUndefined
+
+			endif
+
+		else
+
+			OclUndefined
+
+		endif
+
+	endif endif endif endif endif endif endif
+
+	endif endif endif endif endif endif;
+
+
+
+
+
+helper context ATL!VariableDeclaration
+
+	def: getDeclarations() : Sequence(ATL!VariableDeclaration) =
+
+	if self.oclIsKindOf(ATL!PatternElement)
+
+	then
+
+		Sequence{self}
+
+	else
+
+		let container : ATL!Element = self.immediateComposite in
+
+		if container.oclIsTypeOf(ATL!LetExp)
+
+		then
+
+			Sequence{
+
+				self,
+
+				container.getUpD()
+
+			}->flatten()
+
+		else
+
+			if container.oclIsTypeOf(ATL!IteratorExp)
+
+			then
+
+				Sequence{
+
+					self,
+
+					container.getUpD()
+
+				}->flatten()
+
+			else
+
+				if container.oclIsTypeOf(ATL!IterateExp)
+
+				then
+
+					Sequence{
+
+						self,
+
+						container.getUpD()
+
+					}->flatten()
+
+				else
+
+					Sequence{
+
+						self
+
+					}->flatten()
+
+				endif
+
+			endif
+
+		endif
+
+	endif;
+
+
+
+
+
+helper context ATL!OclExpression
+
+	def: getUpD() : Sequence(ATL!VariableDeclaration) =
+
+	let container : ATL!Element = self.immediateComposite in
+
+	if container.oclIsUndefined() then
+
+		Sequence{}
+
+	else if not container.oclIsKindOf(ATL!OclExpression) then
+
+		if container.oclIsTypeOf(ATL!RuleVariableDeclaration)
+
+		then
+
+			Sequence{
+
+				container."rule".namedElements
+
+			}->flatten()
+
+		else
+
+			if container.oclIsTypeOf(ATL!Binding)
+
+			then
+
+				Sequence{
+
+					container.outPatternElement."rule".namedElements
+
+				}->flatten()
+
+			else
+
+				Sequence{}
+
+			endif
+
+		endif
+
+	else if container.oclIsTypeOf(ATL!LetExp) then
+
+		Sequence{
+
+			container.variable,
+
+			container.getUpD()
+
+		}->flatten()
+
+	else if container.oclIsTypeOf(ATL!IfExp) then
+
+		Sequence{
+
+			container.getUpD()
+
+		}->flatten()
+
+	else if container.oclIsTypeOf(ATL!IteratorExp) then
+
+		if container.source = self
+
+		then
+
+			Sequence{
+
+				container.getUpD()
+
+			}->flatten()
+
+		else
+
+			Sequence{
+
+				container.iterators,
+
+				container.getUpD()
+
+			}->flatten()
+
+		endif
+
+	else if container.oclIsTypeOf(ATL!IterateExp) then
+
+		if container.source = self
+
+		then
+
+			Sequence{
+
+				container.getUpD()
+
+			}->flatten()
+
+		else
+
+			Sequence{
+
+				container.iterators,
+
+				container.result,
+
+				container.getUpD()
+
+			}->flatten()
+
+		endif
+
+	else Sequence{}
+
+	endif endif endif endif endif endif;
+
+
+
+
+
+
+
+
+
+helper context ATL!OclExpression def: getRootComposite() : ATL!Element =
+
+	let container : ATL!Element = self.immediateComposite
+
+	in
+
+	if container.oclIsUndefined()
+
+	then
+
+		OclUndefined
+
+	else
+
+		if container.oclIsKindOf(ATL!OclExpression)
+
+		then
+
+			container.getRootComposite()
+
+		else
+
+			container
+
+		endif
+
+	endif;
+
+
+
+
+
+
+
+rule FreeVariableIsSelfOrThisModule {
+
+	from
+
+		s : ATL!VariableDeclaration (
+
+			s.immediateComposite.oclIsUndefined() and
+
+			s.varName <> 'self' and s.varName <> 'thisModule'
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <-
+
+				if s.variableExp->isEmpty()
+
+				then
+
+					s.location
+
+				else
+
+					s.variableExp->first().location
+
+				endif,
+
+			description <- 'variable \'' + s.varName + '\' undefined'
+
+		)
+
+}
+
+
+
+rule ModelNameIsUnique {
+
+	from
+
+		s : ATL!OclModel (
+
+			thisModule.allModels->exists(e | e.name = s.name and e <> s)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <- 'model \'' + s.name + '\' already defined'
+
+		)
+
+}
+
+
+
+rule RuleNameIsUnique {
+
+	from
+
+		s : ATL!Rule (
+
+			thisModule.allRules->exists(e | e.name = s.name and e <> s)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <- 'rule \'' + s.name + '\' already defined'
+
+		)
+
+}
+
+
+
+rule HelperSignatureIsUnique {
+
+	from
+
+		s : ATL!Helper (
+
+			thisModule.allHelpers
+
+				->exists(e |
+
+					e <> s and
+
+					s.definition.feature.name = e.definition.feature.name and
+
+					(
+
+					 if not s.definition.context_.oclIsUndefined()
+
+					 then
+
+					 	if not e.definition.context_.oclIsUndefined()
+
+					 	then
+
+						if not s.definition.context_.context_.name.oclIsUndefined()
+
+							then
+
+							if not e.definition.context_.context_.name.oclIsUndefined()
+
+								then
+
+									s.definition.context_.context_.name = e.definition.context_.context_.name
+
+								else
+
+									false
+
+								endif
+
+							else
+
+								e.definition.context_.context_.name.oclIsUndefined()
+
+							endif
+
+						else
+
+							false
+
+						endif
+
+					 else
+
+					 	e.definition.context_.oclIsUndefined()
+
+					 endif
+
+					 )
+
+				)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <- 'helper \'' + s.definition.feature.name
+
+							+ '\' already defined'
+
+		)
+
+}
+
+
+
+rule BindingNameIsUniqueInPattern {
+
+	from
+
+		s : ATL!Binding (
+
+			s.outPatternElement.bindings
+
+				->exists(e | e.propertyName = s.propertyName and e <> s)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'binding \'' + s.propertyName + '\' already defined in pattern'
+
+		)
+
+}
+
+
+
+rule PatternNameIsUniqueInRule {
+
+	from
+
+		s : ATL!PatternElement (
+
+			s."rule".namedElements
+
+				->exists(e | e.varName = s.varName and e <> s)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'pattern or variable named \''
+
+				+ s.varName	+ '\' already defined in rule'
+
+		)
+
+}
+
+
+
+rule VariableNameIsUniqueInRule {
+
+	from
+
+		s : ATL!RuleVariableDeclaration (
+
+			s."rule".namedElements
+
+				->exists(e | e.varName = s.varName and e <> s)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'pattern or variable named \'' + s.varName
+
+				+ '\' already defined in rule'
+
+		)
+
+}
+
+
+
+rule NoHelperWithCollectionAsContext {
+
+	from
+
+		s : ATL!Helper (
+
+			if s.definition.context_.oclIsUndefined()
+
+			then
+
+				false
+
+			else
+
+				thisModule.collectionTypes
+
+					->exists(e | s.definition.context_.context_ = e)
+
+			endif
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'helper \'' + s.definition.feature.name
+
+					+ '\': current implementation does not '
+
+					+ 'support helpers with collection context'
+
+		)
+
+}
+
+
+
+rule NoSelfOrThisModuleVariableDeclaration {
+
+	from
+
+		s : ATL!VariableDeclaration (
+
+			not s.immediateComposite.oclIsUndefined() and
+
+			(s.varName = 'self' or s.varName = 'thisModule')
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'helper \'' + s.varName	+ '\' is not valid variable name'
+
+		)
+
+}
+
+
+
+rule NoSelfVariableInRule {
+
+	from
+
+		s : ATL!VariableExp (
+
+			if s.referredVariable.oclIsUndefined()
+
+			then
+
+				false
+
+			else
+
+				s.referredVariable.varName = 'self' and 
+
+				(
+
+					let rComp : ATL!Element = s.getRootComposite() in
+
+					rComp.oclIsTypeOf(ATL!Binding) or
+
+					rComp.oclIsTypeOf(ATL!InPattern)
+
+				)
+
+			endif
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'rule \'' + s.referredVariable.varName
+
+				+ '\': use of the \'self\' variable prohibited in rules'
+
+		)
+
+}
+
+
+
+rule NoResolveTempInSourcePattern {
+
+	from
+
+		s : ATL!OperationCallExp (
+
+			s.operationName = 'resolveTemp' and
+
+			(
+
+				if s.source.oclIsTypeOf(ATL!VariableExp)
+
+				then
+
+					if s.source.referredVariable.oclIsUndefined()
+
+					then
+
+						false
+
+					else
+
+						s.source.referredVariable.varName = 'thisModule'
+
+					endif
+
+				else
+
+					false
+
+				endif
+
+			) and
+
+			s.getRootComposite().oclIsTypeOf(ATL!InPattern)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'rule \'' + s.getRootComposite()."rule".name
+
+				+ '\': use of \'thisModule.resolveTemp()\' function '
+
+				+ 'is prohibited in source patterns'
+
+		)
+
+}
+
+
+
+rule NoResolveTempInModuleAttribute {
+
+	from
+
+		s : ATL!OperationCallExp (
+
+			s.operationName = 'resolveTemp' and
+
+			(
+
+				if s.source.oclIsTypeOf(ATL!VariableExp)
+
+				then
+
+					if s.source.referredVariable.oclIsUndefined()
+
+					then
+
+						false
+
+					else
+
+						s.source.referredVariable.varName = 'thisModule'
+
+					endif
+
+				else
+
+					false
+
+				endif
+
+			) and
+
+			s.getRootComposite().oclIsTypeOf(ATL!Attribute)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'attribute \'' + s.getRootComposite().name
+
+				+ '\': use of \'thisModule.resolveTemp()\' function '
+
+				+ 'is prohibited in attributes'
+
+		)
+
+}
+
+
+
+rule ProhibitedMultiIteratorCollectionOperation {
+
+	from
+
+		s : ATL!IteratorExp (
+
+			thisModule.singleIteratorExps->exists(e | s.name = e) and
+
+			s.iterators->size() > 1
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'iterator \'' + s.name
+
+				+ '\' may have at most one iterator variable'
+
+		)
+
+}
+
+
+
+rule UnsupportedMultiIteratorCollectionOperation {
+
+	from
+
+		s : ATL!IteratorExp (
+
+			thisModule.multiIteratorExps->exists(e | s.name = e) and
+
+			s.iterators->size() > 1
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'with current implementation, iterator \'' + s.name
+
+				+ '\' may have at most one iterator variable'
+
+		)
+
+}
+
+
+
+rule ParameterNameIsUniqueInOperation {
+
+	from
+
+		s : ATL!Parameter (
+
+			s.operation.parameters
+
+				->exists(e | s.varName = e.varName and s <> e)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'a parameter named \'' + s.varName
+
+				+ '\' is already declared in this operation'
+
+		)
+
+}
+
+
+
+rule VariableNameIsUniqueInLoop {
+
+	from
+
+		s : ATL!Iterator (
+
+			s.loopExpr.iterators
+
+				->exists(e | s.varName = e.varName and s <> e)
+
+			or
+
+			if s.loopExpr.oclIsTypeOf(ATL!IterateExp)
+
+			then
+
+				s.loopExpr.result.varName = s.varName
+
+			else
+
+				false
+
+			endif
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'a variable named \'' + s.varName
+
+				+ '\' is already declared in this loop'
+
+		)
+
+}
+
+
+
+rule ResultNameIsUniqueInIterate {
+
+	from
+
+		s : ATL!VariableDeclaration (
+
+			if s.baseExp.oclIsUndefined()
+
+			then
+
+				false
+
+			else
+
+				s.baseExp.iterators
+
+					->exists(e | s.varName = e.varName and s <> e)
+
+			endif
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #error,
+
+			location <- s.location,
+
+			description <-
+
+				'a variable named \'' + s.varName
+
+				+ '\' is already declared in this loop'
+
+		)
+
+}
+
+
+
+rule VariableNameIsUniqueInContainer {
+
+	from
+
+		s : ATL!VariableDeclaration (
+
+			s.getDeclarations()->exists(e | s.varName = e.varName and s <> e)
+
+		)
+
+	to
+
+		t : Problem!Problem (
+
+			severity <- #warning,
+
+			location <- s.location,
+
+			description <-
+
+				'a variable named \'' + s.varName
+
+				+ '\' is already declared in this container'
+
+		)
+
+}
+

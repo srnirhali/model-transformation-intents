@@ -1,0 +1,77 @@
+
+
+library EMOOSE4UML2; 
+
+
+
+
+helper context UML2!Class
+
+def : DIT() : Integer =
+
+	if self.isRoot
+
+		then 0
+
+		else if self.PARN() = 1
+
+				then 1
+
+				else 0
+
+			endif + self.parents->iterate(c; acc : Integer = 0|acc + c.DIT())
+
+	endif;
+
+
+
+helper context UML2!Class
+
+def : NOC() : Integer =
+
+	self.CHIN();
+
+
+
+helper context UML2!Class
+
+def : CBO() : Integer =
+
+	self.coupledClasses->size();
+
+
+
+helper context UML2!Class
+
+def : RFC() : Integer =
+
+	self.allOperations->
+
+		union(self.allOperations->
+
+			collect(o|o.method->collect(m|m.allClients)->
+
+				flatten()->asSet()->select(c|c.oclAsType(UML2!Operation))))->
+
+					flatten()->asSet()->size();
+
+
+
+
+
+
+
+helper context UML2!Class
+
+def : NOM() : Integer =
+
+	self.allOperations->select(o|o.visibility = #private)->size();
+
+
+
+helper context UML2!Class
+
+def : SIZE2() : Integer =
+
+	self.DON() + self.DAN();
+

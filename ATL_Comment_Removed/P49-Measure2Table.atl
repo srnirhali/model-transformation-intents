@@ -1,0 +1,201 @@
+
+
+module Measure2Table; 
+create OUT : Table from IN : Measure;
+
+
+
+uses MeasureHelpers;
+
+
+
+helper def : modelKind : Map(String,String) =
+
+	Map {('KM3','KM3'),
+
+		('UML2','UML2')};
+
+
+
+helper def : elementKind : Map(String,String) =
+
+	Map {('metamodel','Metamodel'),
+
+		('model','Model'),
+
+		('package','Package'),
+
+		('interface','Interface'),
+
+		('class','Class')};
+
+
+
+entrypoint rule Tables() {
+
+	using {
+
+		allMetamodelMeasuresSets : Sequence(Measure!MeasureSet) =
+
+			thisModule.allMeasureSets(#metamodel);
+
+		allModelMeasuresSets : Sequence(Measure!MeasureSet) =
+
+			thisModule.allMeasureSets(#model);
+
+		allPackageMeasuresSets : Sequence(Measure!MeasureSet) =
+
+			thisModule.allMeasureSets(#package);
+
+		allInterfaceMeasuresSets : Sequence(Measure!MeasureSet) =
+
+			thisModule.allMeasureSets(#interface);
+
+		allClassMeasuresSets : Sequence(Measure!MeasureSet) =
+
+			thisModule.allMeasureSets(#class);
+
+	}
+
+	do {
+
+		if (allMetamodelMeasuresSets->notEmpty()) {
+
+			thisModule.AllMeasureSet2Table(allMetamodelMeasuresSets);
+
+		}
+
+		if (allModelMeasuresSets->notEmpty()) {
+
+			thisModule.AllMeasureSet2Table(allModelMeasuresSets);
+
+		}
+
+		if (allPackageMeasuresSets->notEmpty()) {
+
+			thisModule.AllMeasureSet2Table(allPackageMeasuresSets);
+
+		}
+
+		if (allInterfaceMeasuresSets->notEmpty()) {
+
+			thisModule.AllMeasureSet2Table(allInterfaceMeasuresSets);
+
+		}
+
+		if (allClassMeasuresSets->notEmpty()) {
+
+			thisModule.AllMeasureSet2Table(allClassMeasuresSets);
+
+		}
+
+	}
+
+}
+
+
+
+rule AllMeasureSet2Table(allMeasSet : Sequence(Measure!MeasureSet)) {
+
+	to
+
+		t : Table!Table (
+
+			rows <- thisModule.MeasureSet2HdrRow(allMeasSet->first()),
+
+			rows <- allMeasSet->
+
+				collect(ms|thisModule.MeasureSet2ValueRow(ms))
+
+		)
+
+}
+
+
+
+rule MeasureSet2HdrRow(ms : Measure!MeasureSet) {
+
+	to
+
+		hdrRow : Table!Row (
+
+			cells <- thisModule.String2Cell(ms.getElementKind()),
+
+			cells <- ms.allMeasures->
+
+				collect(meas|thisModule.String2Cell(meas.metricName()))
+
+		)
+
+	do {
+
+		hdrRow;
+
+	}
+
+}
+
+
+
+rule MeasureSet2ValueRow(ms : Measure!MeasureSet) {
+
+	to
+
+		valueRow : Table!Row (
+
+			cells <- thisModule.String2Cell(ms.absoluteName()),
+
+			cells <- ms.allMeasures->
+
+				collect(meas|thisModule.String2Cell(meas.stringValue()))
+
+		)
+
+	do {
+
+		valueRow;
+
+	}
+
+}
+
+
+
+rule Sequence2Row(cells : Sequence(OclAny)) {
+
+	to
+
+		row : Table!Row (
+
+			cells <- cells
+
+		)
+
+	do {
+
+		row;
+
+	}
+
+}
+
+
+
+rule String2Cell(content : String) {
+
+	to
+
+		cell : Table!Cell (
+
+			content <- content
+
+		)
+
+	do {
+
+		cell;
+
+	}
+
+}
+

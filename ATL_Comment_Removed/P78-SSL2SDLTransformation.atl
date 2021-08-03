@@ -1,0 +1,638 @@
+module SSL2SDL;
+
+create OUT : SDL from IN : SSL, IN2 : ODM;
+
+
+
+helper def : getOntologyIDName(e : String) : String = 
+
+	e.substring(e.indexOf('#') + 2, e.size())
+
+;
+
+
+
+helper def : getSchemaTypeName(e : String) : String = 
+
+	e.substring(e.indexOf('#') + 2, e.size())
+
+;
+
+
+
+helper def: getDataTypePropertiesForId(inputId : String) : Sequence(ODM!DatatypeProperty) = 
+
+	ODM!Class.allInstances() -> select (d | d.id = inputId) -> 
+
+		collect (d | thisModule.getAllDataTypeProperties(d)) -> flatten()
+
+;
+
+
+
+helper def: getAllDataTypeProperties(c : ODM!Class) : Sequence(ODM!DatatypeProperty) = 
+
+	Sequence{}
+
+	-> append (thisModule.getOwnDataTypeProperties(c))
+
+	-> append ( c.theSuperClass ->
+
+				iterate(e; result : Sequence(ODM!DatatypeProperty) = Sequence{} 
+
+				| result -> append(thisModule.getAllDataTypeProperties(e)) -> flatten())
+
+	   ) -> flatten()
+
+;
+
+
+
+helper def: getOwnDataTypeProperties(c : ODM!Class) : Sequence(ODM!DatatypeProperty) = 
+
+	ODM!DatatypeProperty.allInstances() -> select(e | e.theDomain -> includes (c))     
+
+;
+
+	
+
+helper def: getMultipleInputs() : Sequence(SSL!ServiceInput) = 
+
+	SSL!ServiceFunctionality.allInstances() -> select(e | e.Input.size() > 1) 
+
+	-> collect(e | e.Input) -> flatten()
+
+;
+
+
+
+helper def: getMultipleOutputs() : Sequence(SSL!ServiceOutput) = 
+
+	SSL!ServiceFunctionality.allInstances() -> select(e | e.Output.size() > 1) 
+
+	-> collect(e | e.Output) -> flatten()
+
+;
+
+
+
+helper def: inputMessageName(searchedType: SSL!OntologyClassURI) : String =
+
+     SSL!ServiceInput.allInstances() -> select(e | e.Type = searchedType) -> collect(e | e.name) 
+
+	 -> asSequence() -> first()
+
+;
+
+
+
+helper def: outputMessageName(searchedType: SSL!OntologyClassURI) : String =
+
+     SSL!ServiceOutput.allInstances() -> select(e | e.Type = searchedType) -> collect(e | e.name) 
+
+	 -> asSequence() -> first()
+
+;
+
+
+
+helper def: getTypeGenerator() : SSL!ServiceProfile = 
+
+		SSL!ServiceProfile.allInstances()->asSequence()->first()
+
+;
+
+
+
+helper def: getSDLTypeForODM(p : ODM!DataRange) : String = 
+
+	if p.oclIsKindOf(ODM!PrimitiveType) then
+
+		thisModule.getSDLTypeForSchemaType(
+
+			thisModule.getSchemaTypeName(p.TypeDefinitionURI.lexicalForm))
+
+	else thisModule.getSDLTypeForODM_Default()
+
+	endif
+
+;	
+
+
+
+helper def: getSDLTypeForODM_Default() : String = 
+
+	'type4'
+
+;
+
+
+
+helper def: getSDLTypeForSchemaType(name : String) : String = 
+
+	if  name = 'integer' or name = 'positiveInteger' or name = 'nonPositiveInteger' or
+
+        name = 'negativeInteger' or name = 'nonNegativeInteger' or name = 'long' or
+
+        name = 'int' or name = 'short' or name = 'byte' or name = 'unsignedLong' or
+
+        name = 'unsignedInt' or name = 'unsignedShort' or name = 'unsignedByte'
+
+	then 'type1'	
+	else if name = 'boolean'
+
+		 then 'type2'	
+		 else if name = 'decimal' or name = 'float' or name = 'double'
+
+		 		then 'type3'	
+		 		else if name = 'dateTime' or name = 'date' or name = 'time' or 
+
+						name = 'gYearMonth' or name = 'gMonthDay' or 
+
+						name = 'gYear' or name = 'gMonth' or name = 'gDay'
+
+					 then 'type5'	
+					 else 	if name = 'string' or name = 'normalizedString' or 
+
+					 			name = 'token' or name = 'language' or name = 'NMTOKEN' or 
+
+								name = 'Name' or name = 'NCName' or 
+
+								name = 'hexBinary' or name = 'base64Binary'
+
+					 		then 'type4' 	
+							else 'type4' 	
+							endif						
+
+					 endif
+
+		 		endif
+
+		 endif
+
+	endif
+
+;	
+
+
+
+helper def: getFakeDatatypeSequence(m : Sequence(ODM!DatatypeProperty)) : Sequence(String) = 
+
+	if m.size() = 0
+
+		then Sequence{''}
+
+		else Sequence{}
+
+	endif
+
+;		
+
+
+
+helper def: getInputOutputHavingURIType(t : SSL!DataTypeURI) : Sequence(SSL!FunctionalityParameter) = 
+
+	Sequence{SSL!ServiceInput.allInstances() -> asSequence(), SSL!ServiceOutput.allInstances() -> asSequence()} -> flatten() -> select(e | e.Type = t)
+
+;
+
+
+
+rule TypeFromOntology_Input {
+
+	from inp : SSL!OntologyClassURI (
+
+				SSL!ServiceInput.allInstances() -> select(e | e.Type = inp) -> size() > 0 
+
+			)
+
+	using{
+
+		properties : Sequence(ODM!DatatypeProperty) = 
+
+			thisModule.getDataTypePropertiesForId(thisModule.getOntologyIDName(inp.lexicalform));
+
+		service_name : SSL!ServiceInput = thisModule.inputMessageName(inp);
+
+	}
+
+	to complex : SDL!ComplexType(
+
+		ElName <- service_name + 'Parameters',
+
+		cmpPart <- Sequence{part_a, part_b}
+
+	),
+
+	part_a : distinct SDL!Part foreach(a in properties)(
+
+		ElName <- a.name,
+
+		refPart <- thisModule.resolveTemp(thisModule.getTypeGenerator(), 
+
+			thisModule.getSDLTypeForODM(a.theDataRange)
+
+		)			
+
+	),
+
+	part_b : distinct SDL!Part foreach(c in thisModule.getFakeDatatypeSequence(properties) )	(
+
+		ElName <- thisModule.getOntologyIDName(inp.lexicalform),
+
+		refPart <- thisModule.resolveTemp(thisModule.getTypeGenerator(), 
+
+			thisModule.getSDLTypeForODM_Default()
+
+		)			
+
+	),
+
+	
+
+	part_c : distinct  SDL!Part foreach(b in SSL!ServiceFunctionality.allInstances() ->
+
+									   select(c | c.Input.size() > 1) -> select(v | v.Input -> select(u | u.Type = inp).size() > 0))(
+
+		ElName <- service_name,
+
+		refPart <- complex
+
+	)
+
+	
+
+}
+
+
+
+rule TypeFromOntology_Output {
+
+	from inp : SSL!OntologyClassURI (
+
+				SSL!ServiceOutput.allInstances() -> select(e | e.Type = inp) -> size() > 0
+
+			)
+
+	using{
+
+		properties : Sequence(ODM!DatatypeProperty) = 
+
+			thisModule.getDataTypePropertiesForId(thisModule.getOntologyIDName(inp.lexicalform));
+
+		service_name : SSL!ServiceOutput = thisModule.outputMessageName(inp);
+
+	}
+
+	to complex : SDL!ComplexType(
+
+		ElName <- service_name + 'Parameters',
+
+		cmpPart <- Sequence{part_a, part_b}
+
+	),
+
+	part_a : distinct SDL!Part foreach(a in properties)(
+
+		ElName <- a.name,
+
+		refPart <- thisModule.resolveTemp(thisModule.getTypeGenerator(), 
+
+			thisModule.getSDLTypeForODM(a.theDataRange)
+
+			)			
+
+	),
+
+	part_b : distinct SDL!Part foreach (c in thisModule.getFakeDatatypeSequence(properties)	)(
+
+		ElName <- thisModule.getOntologyIDName(inp.lexicalform),
+
+		refPart <- thisModule.resolveTemp(thisModule.getTypeGenerator(), 
+
+			thisModule.getSDLTypeForODM_Default()
+
+		)			
+
+	),
+
+	
+
+	part_c : distinct  SDL!Part foreach(b in SSL!ServiceFunctionality.allInstances() ->
+
+									   select(c | c.Output.size() > 1) -> select(v | v.Output -> select(u | u.Type = inp).size() > 0))(
+
+		ElName <- service_name,
+
+		refPart <- complex
+
+	)
+
+}
+
+
+
+rule TypeFromSchema {
+
+	from inp : SSL!DataTypeURI (
+
+		thisModule.getInputOutputHavingURIType(inp) -> size() > 0 
+
+	)
+
+	to part_c : SDL!Part (
+
+		ElName <- thisModule.getInputOutputHavingURIType(inp) -> first().name,
+
+		refPart <- thisModule.resolveTemp(thisModule.getTypeGenerator(), 	
+
+			thisModule.getSDLTypeForSchemaType(thisModule.getSchemaTypeName(inp.lexicalform)) )
+
+	)
+
+}
+
+
+
+rule SingleInput_NonOntology {
+
+	from e : SSL!ServiceInput (not thisModule.getMultipleInputs()->includes(e)
+
+		and not e.Type.oclIsKindOf(SSL!OntologyClassURI ))
+
+	to inm : SDL!SimpleMessage(
+
+		  ElName <- e.name,
+
+		  cmpPart <- e.Type
+
+    )	
+
+}
+
+
+
+rule SingleOutput_NonOntology {
+
+	from e : SSL!ServiceOutput (not thisModule.getMultipleOutputs()->includes(e)
+
+		and not e.Type.oclIsKindOf(SSL!OntologyClassURI ))
+
+	to outm : SDL!SimpleMessage (
+
+   	  ElName <- e.name,
+
+      cmpPart <- e.Type
+
+    )
+
+}
+
+
+
+rule SingleInput_Ontology {
+
+	from e : SSL!ServiceInput ( not thisModule.getMultipleInputs()->includes(e) and 
+
+		e.Type.oclIsKindOf(SSL!OntologyClassURI ))
+
+	to inm : SDL!SimpleMessage(
+
+		ElName <- e.name,
+
+		cmpPart <- part
+
+	),
+
+	part : SDL!Part(
+
+		ElName <- e.name + 'ComplexType',
+
+		refPart <- e.Type
+
+	)
+
+}
+
+
+
+rule SingleOutput_Ontology {
+
+	from e : SSL!ServiceOutput ( not thisModule.getMultipleOutputs()->includes(e) and 
+
+		e.Type.oclIsKindOf(SSL!OntologyClassURI ))
+
+	to outm : SDL!SimpleMessage(
+
+		ElName <- e.name,
+
+		cmpPart <- part
+
+	),
+
+	part : SDL!Part(
+
+		ElName <- e.name + 'ComplexType',
+
+		refPart <- e.Type
+
+	)
+
+}
+
+
+
+
+
+
+
+rule ServiceFunctionality11 {
+
+	from e : SSL!ServiceFunctionality (e.Input.size() <= 1 and e.Output.size() <= 1 )
+
+	to outOper : SDL!Operation(
+
+		ElName <- e.name,
+
+		refInputMessage <- e.Input,
+
+		refOutputMessage <- e.Output
+
+	)
+
+}
+
+
+
+rule ServiceFunctionalityN1 {
+
+	from e : SSL!ServiceFunctionality (e.Input.size() > 1 and e.Output.size() = 1)
+
+	to inp : SDL!SimpleMessage(
+
+		ElName <- e.name + 'Request',
+
+		cmpPart <- Sequence{e.Input -> collect(k | thisModule.resolveTemp(k.Type, 'part_c'))}
+
+	),
+
+	outOper : SDL!Operation(
+
+		ElName <- e.name,
+
+		refInputMessage <- inp,
+
+		refOutputMessage <- e.Output
+
+	)
+
+}
+
+
+
+
+
+rule ServiceFunctionality1N {
+
+	from e : SSL!ServiceFunctionality (e.Input.size() = 1 and e.Output.size() > 1)
+
+	to out : SDL!SimpleMessage(
+
+		ElName <- e.name + 'Response',
+
+		cmpPart <- Sequence{
+
+			e.Output -> collect(k | thisModule.resolveTemp(k.Type, 'part_c'))	
+
+		}
+
+	),
+
+	outOper : SDL!Operation(
+
+		ElName <- e.name,
+
+		refInputMessage <- e.Input,
+
+		refOutputMessage <- out		
+
+	)
+
+}
+
+
+
+rule ServiceFunctionalityNN {
+
+	from e : SSL!ServiceFunctionality (e.Input.size() > 1 and e.Output.size() > 1)
+
+	to inp : SDL!SimpleMessage(
+
+		ElName <- e.name + 'Request',
+
+		cmpPart <- Sequence{
+
+			e.Input -> collect(k | thisModule.resolveTemp(k.Type, 'part_c'))	
+
+		}		
+
+	),
+
+	out : SDL!SimpleMessage(
+
+		ElName <- e.name + 'Response',
+
+		cmpPart <- Sequence{
+
+			e.Output -> collect(k | thisModule.resolveTemp(k.Type, 'part_c'))	
+
+		}	
+
+	),
+
+	outOper : SDL!Operation(
+
+		ElName <- e.name,
+
+		refInputMessage <- inp,
+
+		refOutputMessage <- out		
+
+	)
+
+}
+
+
+
+rule Definitions {
+
+	from e : SSL!ServiceProfile 
+
+	to out : SDL!Definitions ( 
+
+		ElName <- e.name,
+
+		cmpType <- Sequence{type1, type2, type3, type4, type5, type6, SSL!OntologyClassURI.allInstances()},
+
+		cmpInterface <- interfaces,
+
+		cmpMessage <- Sequence{
+
+			SSL!ServiceInput.allInstances() -> select(e | not thisModule.getMultipleInputs() -> includes(e)) -> collect (e | thisModule.resolveTemp(e, 'inm') ),
+
+			SSL!ServiceOutput.allInstances() -> select(e | not thisModule.getMultipleOutputs() -> includes(e)) -> collect (e | thisModule.resolveTemp(e, 'outm') ),
+
+			SSL!ServiceFunctionality.allInstances() -> select (e | e.Input.size() > 1) -> collect (e | thisModule.resolveTemp(e, 'inp') ),
+
+			SSL!ServiceFunctionality.allInstances() -> select (e | e.Output.size() > 1) -> collect (e | thisModule.resolveTemp(e, 'out') )
+
+		}
+
+	),
+
+	interfaces : SDL!Interface (
+
+		ElName <- e.name + 'Service', 
+
+		cmpOperation <- e.Functionality -> collect(e | thisModule.resolveTemp(e, 'outOper') )
+
+	),
+
+	type1 : SDL!SdlInteger(
+
+	   ElName <- 'Integer'
+
+	),
+
+	type2 : SDL!SdlBoolean(
+
+	   ElName <- 'Boolean'
+
+	),
+
+	type3 : SDL!SdlReal(
+
+	   ElName <- 'Real'
+
+	),
+
+	type4 : SDL!SdlString(
+
+	   ElName <- 'String'
+
+	),
+
+	type5 : SDL!SdlDateTime(
+
+	   ElName <- 'DateTime'
+
+	),
+
+	type6 : SDL!SdlUri(
+
+	   ElName <- 'Uri'
+
+	)
+
+}
+

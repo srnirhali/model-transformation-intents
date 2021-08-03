@@ -1,0 +1,2504 @@
+
+
+
+
+module R2ML2RDM; 
+create OUT : RDM from IN : R2ML;
+
+
+
+uses strings;
+
+
+
+
+
+helper context String def: firstCharToUpper() : String =
+
+	let firstChar : String = self.substring(1, 1) in
+
+		firstChar.toUpper() + self.substring(2, self.size());
+
+
+
+helper context String def: toBoolean() : Boolean =
+
+	if self = 'true'
+
+	then true
+
+	else false
+
+	endif;
+
+
+
+helper context R2ML!ObjectClassificationAtom def: getTerm : R2ML!ObjectVariable = 
+
+	self.term;
+
+
+
+helper context R2ML!Disjunction def: getTerm : R2ML!ObjectVariable = 
+
+	self.formulas->asSequence()->first().getTerm;
+
+
+
+helper context R2ML!Conjuction def: getTerm : R2ML!ObjectVariable = 
+
+	self.formulas->asSequence()->first().getTerm;
+
+
+
+helper context R2ML!UniversallyQuantifiedFormula def: getTerm : R2ML!ObjectVariable = 
+
+	self.formula.getTerm;
+
+
+
+helper context R2ML!ExistentiallyQuantifiedFormula def: getTerm : R2ML!ObjectVariable = 
+
+	self.formula.getTerm;
+
+
+
+helper context R2ML!ReferencePropertyAtom def: getTerm : R2ML!ObjectVariable = 
+
+	self.subject;
+
+
+
+helper context R2ML!AtMostQuantifiedFormula def: getTerm : R2ML!ObjectVariable = 
+
+	self.formula.getTerm;
+
+
+
+helper context R2ML!AtLeastQuantifiedFormula def: getTerm : R2ML!ObjectVariable = 
+
+	self.formula.getTerm;
+
+
+
+helper context R2ML!AtLeastAndAtMostQuantifiedFormula def: getTerm : R2ML!ObjectVariable = 
+
+	self.formula.getTerm;
+
+
+
+helper context R2ML!EqualityAtom def: getTerm : R2ML!ObjectVariable = 
+
+	self.terms->select(e | e.oclIsTypeOf(R2ML!ObjectVariable))->first();
+
+
+
+helper context R2ML!DatatypePredicateAtom def: getTerm : R2ML!DataVariable = 
+
+	self.dataArguments->select(c | c.oclIsTypeOf(R2ML!DataVariable))->first();
+
+
+
+helper context R2ML!AttributionAtom def: getTerm : R2ML!Variable = 
+
+	if self.dataValue.oclIsTypeOf(R2ML!DataVariable) then 
+		self.dataValue
+
+	else self.subject
+
+	endif;
+
+
+
+helper context R2ML!Implication def: getChildren : Sequence(R2ML!LogicalFormula) =
+
+	self.getAntecedent->asSequence()->union(self.getConsequent->asSequence());
+
+	
+
+helper context R2ML!Implication def: getAntecedent : Sequence(R2ML!LogicalFormula) 	=
+
+	 if self.antecedent.oclIsTypeOf(R2ML!Conjuction) then
+
+	 	if self.antecedent.isConjuctionFromIntersection then
+
+			Sequence{self.antecedent}
+
+		else self.antecedent.formulas
+
+		endif
+
+	 else Sequence{self.antecedent}
+
+	 endif;
+
+	
+
+helper context R2ML!Implication def: getConsequent : Sequence(R2ML!LogicalFormula) 	=
+
+	if self.consequent.oclIsTypeOf(R2ML!Conjuction) then
+
+	 	if self.consequent.isConjuctionFromIntersection then
+
+			Sequence{self.consequent}
+
+		else self.consequent.formulas
+
+		endif
+
+	 else Sequence{self.consequent}
+
+	 endif; 
+
+	
+
+helper def: getChildrenOfAllTopMostImplications() : Sequence(R2ML!LogicalFormula) =
+
+	 let allImps : Sequence(R2ML!Implication) = thisModule.getTopMostUniversallyQuantifiedFormulas()->collect(c | c.formula)->flatten() in
+
+  	 	allImps->collect(c | c.getChildren)->flatten();
+
+
+
+helper context R2ML!Conjuction def: isConjuctionFromIntersection : Boolean = 
+
+		if R2ML!ExistentiallyQuantifiedFormula.allInstancesFrom('IN')->asSequence()->collect(c | c.formula)->flatten()->excludes(self)
+
+			and	self.formulas->size() = 2
+
+			and self.formulas->asSequence()->first().getTerm = self.formulas->asSequence()->last().getTerm
+
+			and ( self.formulas->select(c | c.oclIsTypeOf(R2ML!Disjunction))->collect(e | e.formulas)->flatten()->forAll(c | c.oclIsTypeOf(R2ML!EqualityAtom))
+
+			and self.formulas->select(c | c.oclIsTypeOf(R2ML!UniversallyQuantifiedFormula))->collect(e | e.formula)->flatten()->forAll(c | c.oclIsTypeOf(R2ML!Implication))
+
+			and self.formulas->select(c | c.oclIsTypeOf(R2ML!ExistentiallyQuantifiedFormula))->collect(e | e.formula)->flatten()->forAll(c | c.oclIsTypeOf(R2ML!Conjuction))
+
+			and self.formulas->select(c | c.oclIsTypeOf(R2ML!AtLeastQuantifiedFormula))->collect(e | e.formula)->flatten()->forAll(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))
+
+			and self.formulas->select(c | c.oclIsTypeOf(R2ML!AtMostQuantifiedFormula))->collect(e | e.formula)->flatten()->forAll(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))
+
+			and self.formulas->select(c | c.oclIsTypeOf(R2ML!AtLeastAndAtMostQuantifiedFormula))->collect(e | e.formula)->flatten()->forAll(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom)) 
+
+			and self.formulas->select(c | c.oclIsTypeOf(R2ML!AttributionAtom))->size() = 0
+
+			and self.formulas->select(c | c.oclIsTypeOf(R2ML!DatatypePredicateAtom))->size() = 0 )
+
+			and self.formulas->collect(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->flatten()->size() > 0
+
+		then true
+
+		else false
+
+		endif;
+
+
+
+helper def: getTopMostUniversallyQuantifiedFormulas() : Sequence(R2ML!UniversallyQuantifiedFormula) =
+
+	R2ML!AlethicIntegrityRule.allInstancesFrom('IN')->asSequence()->collect(c | c.constraint)->flatten();	
+
+	
+
+helper context R2ML!ReferencePropertyAtom def: isRefPropAtomForHasValue : Boolean =
+
+	thisModule.getChildrenOfAllTopMostImplications()->excludes(self) and
+
+	R2ML!UniversallyQuantifiedFormula.allInstancesFrom('IN')->asSequence()->excluding(thisModule.getTopMostUniversallyQuantifiedFormulas())->select(e | e.formula.oclIsTypeOf(R2ML!Implication))->collect(c | c.formula)->flatten()->collect(c | c.antecedent)->flatten()->excludes(self) and
+
+	R2ML!ExistentiallyQuantifiedFormula.allInstancesFrom('IN')->asSequence()->select(e | e.formula.oclIsTypeOf(R2ML!Conjuction))->collect(c | c.formula.formulas->asSequence())->flatten()->excludes(self) and
+
+	R2ML!AtMostQuantifiedFormula.allInstancesFrom('IN')->asSequence()->collect(c | c.formula)->flatten()->excludes(self) and
+
+	R2ML!AtLeastQuantifiedFormula.allInstancesFrom('IN')->asSequence()->collect(c | c.formula)->flatten()->excludes(self) and
+
+	R2ML!AtLeastAndAtMostQuantifiedFormula.allInstancesFrom('IN')->asSequence()->collect(c | c.formula)->flatten()->excludes(self);
+
+
+
+
+
+helper context R2ML!LogicalFormula def: getDatatypePredicateAtomsWithSubElems() : Sequence(OclAny) =
+
+	if self.oclIsTypeOf(R2ML!Conjuction) then
+
+	    self.formulas->select(c | c.oclIsTypeOf(R2ML!DatatypePredicateAtom))->asSequence()->collect(c | c.getElementWithSubElems())->flatten()->asSequence()
+
+	else if self.oclIsTypeOf(R2ML!DatatypePredicateAtom) then
+
+			self.getElementWithSubElems()
+
+		 else OclUndefined
+
+		 endif
+
+	endif;
+
+
+
+helper context R2ML!LogicalFormula def: getReferencePropertyAtomsWithTermsWithSubElems() : Sequence(OclAny) =
+
+	if self.oclIsTypeOf(R2ML!Conjuction) then
+
+		Sequence { self.formulas->select(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->select(c | not c.subject.oclIsTypeOf(R2ML!ObjectVariable) or not c.object.oclIsTypeOf(R2ML!ObjectVariable))->asSequence()->collect(c | c.getElementWithSubElems())->flatten()->asSequence(),
+
+  				   self.formulas->select(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->select(c | c.subject.oclIsTypeOf(R2ML!ObjectVariable) and c.object.oclIsTypeOf(R2ML!ObjectVariable))->flatten()->asSequence() 
+				 }
+
+	else if not self.subject.oclIsTypeOf(R2ML!ObjectVariable) or not self.object.oclIsTypeOf(R2ML!ObjectVariable) then
+
+			self.getElementWithSubElems()->flatten()->asSequence()
+
+		 else self
+
+		 endif
+
+	endif;
+
+
+
+helper context R2ML!ReferencePropertyAtom def: areAllObjectVariables() : Boolean =
+
+	if self.subject.oclIsTypeOf(R2ML!ObjectVariable) then
+
+		if self.object.oclIsTypeOf(R2ML!ObjectVariable) then
+
+			true
+
+		else false
+
+		endif
+
+	else false
+
+	endif;
+
+
+
+helper context R2ML!ReferencePropertyAtom def: getElementWithSubElems() : Sequence(OclAny) = 
+
+	Sequence{ if not self.subject.oclIsTypeOf(R2ML!ObjectVariable) then
+
+				self.subject.getElementWithSubElems()->flatten()->asSequence()
+
+			  else OclUndefined
+
+			  endif,
+
+			  if not self.object.oclIsTypeOf(R2ML!ObjectVariable) then
+
+				self.object.getElementWithSubElems()->flatten()->asSequence()
+
+			  else OclUndefined
+
+			  endif
+
+	}->flatten()->asSequence()->append(self);
+
+	
+
+helper context R2ML!DatatypePredicateAtom def: getElementWithSubElems() : Sequence(OclAny) = 
+
+	self.dataArguments->select(c | not c.oclIsKindOf(R2ML!DataLiteral))->asSequence()->collect(c | c.getElementWithSubElems())->flatten()->asSequence()->append(self);
+
+
+
+helper context R2ML!AttributeFunctionTerm def: getElementWithSubElems() : Sequence(OclAny) = 
+
+	Sequence { self.contextArgument.getElementWithSubElems() }->flatten()->append(self);
+
+	
+
+helper context R2ML!ReferencePropertyFunctionTerm def: getElementWithSubElems() : Sequence(OclAny) = 
+
+	Sequence { self.contextArgument.getElementWithSubElems() }->flatten()->append(self);
+
+	
+
+helper context R2ML!DataOperationTerm def: getElementWithSubElems() : Sequence(OclAny) = 
+
+	Sequence { self.contextArgument.getElementWithSubElems() }->flatten()->append(self);
+
+	
+
+helper context R2ML!ObjectVariable def: getElementWithSubElems() : Sequence(OclAny) = 
+
+	Sequence { self };
+
+	
+
+helper context R2ML!ReferencePropertyFunctionTerm def: getVariableName() : String = 
+
+		self.contextArgument.name + self.referencePropertyRef.name.firstCharToUpper();
+
+
+
+
+
+rule Implication2Rule {
+
+	from i : R2ML!Implication (
+
+		thisModule.getTopMostUniversallyQuantifiedFormulas()->collect(c | c.formula)->flatten()->includes(i)
+
+		)
+
+	to o : RDM!Rule (
+
+		hasAntecedent <- ant,
+
+		hasConsequent <- con
+
+		),
+
+	ant : RDM!Antecedent (
+
+		containsAtom <- if i.antecedent.oclIsTypeOf(R2ML!Conjuction) then
+
+							if	i.antecedent.isConjuctionFromIntersection
+
+							then
+
+								i.antecedent
+
+							else Sequence { i.antecedent.formulas->select(c | not c.oclIsTypeOf(R2ML!DatatypePredicateAtom) and not c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->asSequence(),
+
+											i.antecedent.getDatatypePredicateAtomsWithSubElems(),
+
+											i.antecedent.getReferencePropertyAtomsWithTermsWithSubElems()
+
+											}
+
+							endif
+
+						else if i.antecedent.oclIsTypeOf(R2ML!DatatypePredicateAtom) then
+
+								i.antecedent.getDatatypePredicateAtomsWithSubElems()
+
+							 else if i.antecedent.oclIsTypeOf(R2ML!ReferencePropertyAtom) then
+
+							 		i.antecedent.getElementWithSubElems()
+
+									   
+							 	  else if i.antecedent.oclIsTypeOf(R2ML!Disjunction) then
+
+							 		    if i.antecedent.getTerm.oclIsTypeOf(R2ML!ObjectVariable) then
+
+							 			   if not i.antecedent.getTerm.classRef.oclIsUndefined() then
+
+											 
+											 thisModule.LogicalFormula2Intersection(i.antecedent)
+
+										   else i.antecedent
+
+										   endif
+
+							 	        else i.antecedent
+
+								        endif
+
+								      else i.antecedent
+
+								      endif
+
+								 endif
+
+							 endif
+
+						endif
+
+		),
+
+	con : RDM!Consequent (
+
+		containsAtom <- if i.consequent.oclIsTypeOf(R2ML!Conjuction) then
+
+								if	i.consequent.isConjuctionFromIntersection
+
+							then
+
+								i.consequent
+
+							else Sequence { i.consequent.formulas->select(c | not c.oclIsTypeOf(R2ML!DatatypePrediacateAtom) and not c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->asSequence(),
+
+											i.consequent.getDatatypePredicateAtomsWithSubElems(),
+
+											i.consequent.getReferencePropertyAtomsWithTermsWithSubElems()
+
+											}
+
+							endif
+
+						else if i.consequent.oclIsTypeOf(R2ML!DatatypePredicateAtom) then
+
+								i.consequent.getDatatypePredicateAtomsWithSubElems()
+
+							 else if i.consequent.oclIsTypeOf(R2ML!ReferencePropertyAtom) then
+
+							 		i.consequent.getElementWithSubElems()
+
+							 		   
+							 	  else if i.consequent.oclIsTypeOf(R2ML!Disjunction) then
+
+							 		       if i.consequent.getTerm.oclIsTypeOf(R2ML!ObjectVariable) then
+
+							 			       if not i.consequent.getTerm.classRef.oclIsUndefined() then
+
+											      
+										      	thisModule.LogicalFormula2Intersection(i.consequent)
+
+										       else i.consequent
+
+										       endif
+
+							 	          else i.consequent
+
+								          endif
+
+								       else i.consequent
+
+								       endif
+
+							     endif
+
+							 endif
+
+						endif
+
+		)
+
+}
+
+
+
+unique lazy rule LogicalFormula2Intersection {
+
+	from i : R2ML!LogicalFormula
+
+	to o :  RDM!Atom (
+
+				name <- 'ClassAtom',
+
+				hasPredicateSymbol <- intCla,
+
+				terms <- thisModule.ObjectVariable2IndividualVariable(i.getTerm)
+
+			),
+
+		intCla : RDM!IntersectionClass (
+
+			intersectionOf <- Sequence { thisModule.Class2Class(i.getTerm.classRef),
+
+										 i
+
+									   }
+
+			)	
+
+}
+
+
+
+
+
+rule ReferencePropertyAtom2IndividualPropertyAtom {
+
+	from i : R2ML!ReferencePropertyAtom (
+
+		not i.isRefPropAtomForHasValue and i.areAllObjectVariables()
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'IndividualPropertyAtom',
+
+		hasPredicateSymbol <- thisModule.ReferenceProperty2ObjectProperty(i.referenceProperty),
+
+		terms <- Sequence { thisModule.ObjectVariable2IndividualVariable(i.object),
+
+							thisModule.ObjectVariable2IndividualVariable(i.subject)}
+
+		)
+
+}
+
+
+
+unique lazy rule ReferenceProperty2ObjectProperty {
+
+	from i : R2ML!ReferenceProperty
+
+	to o : RDM!ObjectProperty (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+unique lazy rule ReferenceProperty2DatatypeProperty {
+
+	from i : R2ML!ReferenceProperty
+
+	to o : RDM!DatatypeProperty (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+unique lazy rule ObjectVariable2IndividualVariable {
+
+	from i : R2ML!ObjectVariable
+
+	to o : RDM!IndividualVariable (
+
+			name <- i.name,
+
+			classRef <- if not i.classRef.oclIsUndefined() then
+
+							thisModule.Class2Class(i.classRef)
+
+						else OclUndefined
+
+						endif
+
+		)		
+
+}
+
+
+
+unique lazy rule DataVariable2IndividualVariable {
+
+	from i : R2ML!DataVariable
+
+	to o : RDM!IndividualVariable (
+
+			name <- i.name
+
+		)		
+
+}
+
+
+
+
+
+rule Conjuction2ClassAtom {
+
+	from i : R2ML!Conjuction (
+
+		i.isConjuctionFromIntersection and
+
+		
+			if i.formulas->asSequence()->first().getTerm.oclIsTypeOf(R2ML!ObjectVariable) then
+
+				if not i.formulas->asSequence()->first().getTerm.classRef.oclIsUndefined() then
+
+					false
+
+				else true
+
+				endif
+
+			else true
+
+			endif
+
+ 	)
+
+	to o : RDM!Atom (
+
+		name <- 'ClassAtom',
+
+		hasPredicateSymbol <- intCla,
+
+		terms <- thisModule.ObjectVariable2IndividualVariable(i.formulas->asSequence()->first().getTerm)
+
+		),
+
+		intCla : RDM!IntersectionClass (
+
+			intersectionOf <- Sequence { i.formulas->asSequence()->select(c | c.oclIsTypeOf(R2ML!ObjectClassificationAtom))->collect(e | thisModule.Class2Class(e.type)),
+
+								  		 i.formulas->asSequence()->select(c | not c.oclIsTypeOf(R2ML!ObjectClassificationAtom))
+
+									   }
+
+			)	
+
+}
+
+
+
+rule DisjunctionAtom2Union {
+
+	from i : R2ML!Disjunction (
+
+		R2ML!Conjuction.allInstancesFrom('IN')->asSequence()->select(c | c.isConjuctionFromIntersection)->collect(e | e.formulas)->flatten()->excludes(i) and
+
+		R2ML!Disjunction.allInstancesFrom('IN')->asSequence()->select(e | e.formulas->asSequence()->first().oclIsTypeOf(R2ML!EqualityAtom) or e.formulas->asSequence()->first().oclIsTypeOf(R2ML!DatatypePredicateAtom))->excludes(i) and
+
+		
+
+		  ( thisModule.getChildrenOfAllTopMostImplications()->includes(i) and 
+
+			if i.formulas->asSequence()->first().getTerm.oclIsTypeOf(R2ML!ObjectVariable) then
+
+				if not i.formulas->asSequence()->first().getTerm.classRef.oclIsUndefined() then
+
+					false
+
+				else true
+
+				endif
+
+			else true
+
+			endif
+
+		  )
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'ClassAtom',
+
+		hasPredicateSymbol <- uniCla,
+
+		terms <- thisModule.ObjectVariable2IndividualVariable(i.formulas->asSequence()->first().getTerm)
+
+		),
+
+		uniCla : RDM!UnionClass (
+
+			unionOf <- Sequence { i.formulas->asSequence()->select(c | c.oclIsTypeOf(R2ML!ObjectClassificationAtom))->collect(e | thisModule.Class2Class(e.type)),
+
+								  i.formulas->asSequence()->select(c | not c.oclIsTypeOf(R2ML!ObjectClassificationAtom))
+
+								}
+
+			)
+
+}
+
+
+
+rule Disjunction2Union {
+
+	from i : R2ML!Disjunction (
+
+		R2ML!Conjuction.allInstancesFrom('IN')->asSequence()->select(c | c.isConjuctionFromIntersection)->collect(e | e.formulas)->flatten()->excludes(i) and
+
+		R2ML!Disjunction.allInstancesFrom('IN')->asSequence()->select(e | e.formulas->asSequence()->first().oclIsTypeOf(R2ML!EqualityAtom) or e.formulas->asSequence()->first().oclIsTypeOf(R2ML!DatatypePredicateAtom))->excludes(i)
+
+		and
+
+		
+
+		  ( thisModule.getChildrenOfAllTopMostImplications()->excludes(i) or 
+
+			
+			if i.formulas->asSequence()->first().getTerm.oclIsTypeOf(R2ML!ObjectVariable) then
+
+				if not i.formulas->asSequence()->first().getTerm.classRef.oclIsUndefined() then
+
+					true
+
+				else false
+
+				endif
+
+			else true
+
+			endif
+
+		  )
+
+		)
+
+	to uniCla : RDM!UnionClass (
+
+			unionOf <- Sequence { i.formulas->asSequence()->select(c | c.oclIsTypeOf(R2ML!ObjectClassificationAtom))->collect(e | thisModule.Class2Class(e.type)),
+
+								  i.formulas->asSequence()->select(c | not c.oclIsTypeOf(R2ML!ObjectClassificationAtom))
+
+								}
+
+			)
+
+}
+
+
+
+rule NegationAtom2Complement {
+
+	from i : R2ML!StrongNegation (
+
+			i.oclIsTypeOf(R2ML!StrongNegation) and thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'ClassAtom',
+
+		hasPredicateSymbol <- comCla,
+
+		terms <- thisModule.ObjectVariable2IndividualVariable(i.formula.getTerm)
+
+		),
+
+		comCla : RDM!ComplementClass (
+
+			complementOf <- if i.formula.oclIsTypeOf(R2ML!ObjectClassificationAtom) then
+
+								thisModule.Class2Class(i.formula.type)
+
+							else i.formula
+
+							endif
+
+			)
+
+}
+
+
+
+rule Negation2Complement {
+
+	from i : R2ML!StrongNegation (
+
+			i.oclIsTypeOf(R2ML!StrongNegation) and thisModule.getChildrenOfAllTopMostImplications()->excludes(i)
+
+		)
+
+	to comCla : RDM!ComplementClass (
+
+			complementOf <- if i.formula.oclIsTypeOf(R2ML!ObjectClassificationAtom) then
+
+								thisModule.Class2Class(i.formula.type)
+
+							else i.formula
+
+							endif
+
+			)
+
+}
+
+
+
+rule DisjunctionFromIntersection2EnumeratedClass {
+
+	from i : R2ML!Disjunction (
+
+			R2ML!Conjuction.allInstancesFrom('IN')->asSequence()->select(c | c.isConjuctionFromIntersection)->collect(e | e.formulas)->flatten()->includes(i)
+
+			and		
+
+			i.formulas->select(e | e.oclIsTypeOf(R2ML!EqualityAtom))->size() > 0
+
+		)
+
+	to enumClass : RDM!EnumeratedClass (
+
+			oneOf <- i.formulas->asSequence()->collect(c | c.terms)->flatten()->select(c | c.oclIsTypeOf(R2ML!ObjectName))->asSequence()
+
+			)
+
+}
+
+
+
+rule DisjunctionFromAtom2EnumeratedClass {
+
+	from i : R2ML!Disjunction (
+
+			R2ML!Conjuction.allInstancesFrom('IN')->asSequence()->select(c | c.isConjuctionFromIntersection)->collect(e | e.formulas)->flatten()->excludes(i)
+
+			and		
+
+			i.formulas->select(e | e.oclIsTypeOf(R2ML!EqualityAtom))->size() > 0
+
+		)
+
+	to o : RDM!Atom	(
+
+			name <- 'ClassAtom',
+
+			hasPredicateSymbol <- enumClass,
+
+			terms <- thisModule.ObjectVariable2IndividualVariable(i.formulas->asSequence()->first().getTerm)
+
+		),
+
+		enumClass : RDM!EnumeratedClass (
+
+			oneOf <- i.formulas->collect(e | e.terms)->flatten()->select(c | c.oclIsTypeOf(R2ML!ObjectName))
+
+			)
+
+}
+
+
+
+rule ObjectName2Individual {
+
+	from i : R2ML!ObjectName (
+
+		R2ML!EqualityAtom.allInstancesFrom('IN')->asSequence()->collect(c | c.terms)->flatten()->select(e | e.oclIsTypeOf(R2ML!ObjectName))->includes(i)
+
+		)
+
+	to o : RDM!Individual (
+
+		name <- i.name
+
+		)
+
+}
+
+
+
+rule ObjectClassificationAtom2ClassAtom {
+
+	from i : R2ML!ObjectClassificationAtom (		
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i) and
+
+		R2ML!Conjuction.allInstancesFrom('IN')->asSequence()->select(e | e.isConjuctionFromIntersection)->collect(e | e.formulas)->flatten()->excludes(i)
+
+		and i.isNegated = false
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'ClassAtom',
+
+		hasPredicateSymbol <- thisModule.Class2Class(i.type),
+
+		terms <- thisModule.ObjectVariable2IndividualVariable(i.term)
+
+	)
+
+}
+
+
+
+rule ObjectClassificationAtomNegated2ComplementClassAtom {
+
+	from i : R2ML!ObjectClassificationAtom (		
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i) and
+
+		R2ML!Conjuction.allInstancesFrom('IN')->asSequence()->select(e | e.isConjuctionFromIntersection)->collect(e | e.formulas)->flatten()->excludes(i)
+
+		and i.isNegated = true
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'ClassAtom',
+
+		hasPredicateSymbol <- cla,
+
+		terms <- thisModule.ObjectVariable2IndividualVariable(i.term)
+
+	),
+
+	cla : RDM!Class (
+
+			subClassOf <- Sequence { cs }
+
+		),
+
+	cs : RDM!ComplementClass (
+
+			complementOf <- thisModule.Class2Class(i.type)
+
+	)
+
+}
+
+
+
+
+
+unique lazy rule Class2Class {
+
+	from i : R2ML!Class
+
+	to cla : RDM!Class (
+
+				name <- i.name
+
+			)
+
+}
+
+
+
+rule ExistentiallyQuantifiedFormulaClass2SomeValuesFromRestriction {
+
+	from i : R2ML!ExistentiallyQuantifiedFormula (
+
+		thisModule.getChildrenOfAllTopMostImplications()->excludes(i) and
+
+		i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->size() > 0
+
+		)
+
+	to o : RDM!SomeValuesFromRestriction (
+
+		someValuesFromClass <- Sequence { i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!ObjectClassificationAtom))->collect(c | thisModule.Class2Class(c.type))->first(),
+
+										  i.formula.formulas->select(c | not c.oclIsTypeOf(R2ML!ReferencePropertyAtom) and not c.oclIsTypeOf(R2ML!ObjectClassificationAtom))->first()
+
+										}->select(c | not c.oclIsUndefined())->asSequence()->first(),
+
+		onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->first().referenceProperty)
+
+		)
+
+}
+
+
+
+rule ExistentiallyQuantifiedFormulaClass2ClassAtomSomeValuesFromRestriction {
+
+	from i : R2ML!ExistentiallyQuantifiedFormula (
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i) and
+
+		i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->size() > 0
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'ClassAtom',
+
+			hasPredicateSymbol <- svf,
+
+			terms <- thisModule.ObjectVariable2IndividualVariable(i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->first().getTerm)
+
+		),
+
+	svf : RDM!SomeValuesFromRestriction (
+
+		someValuesFromClass <- Sequence { i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!ObjectClassificationAtom))->collect(c | thisModule.Class2Class(c.type))->first(),
+
+										  i.formula.formulas->select(c | not c.oclIsTypeOf(R2ML!ReferencePropertyAtom) and not c.oclIsTypeOf(R2ML!ObjectClassificationAtom))->first()
+
+										}->select(c | not c.oclIsUndefined())->asSequence()->first(),
+
+		onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom))->first().referenceProperty)
+
+		)
+
+}
+
+
+
+rule UniversallyQuantifiedFormulaClass2AllValuesFromRestriction {
+
+	from i : R2ML!UniversallyQuantifiedFormula (
+
+		thisModule.getTopMostUniversallyQuantifiedFormulas()->excludes(i) and
+
+		if i.formula.oclIsTypeOf(R2ML!Implication) then
+
+			if i.formula.antecedent.oclIsTypeOf(R2ML!ReferencePropertyAtom)
+
+			then true
+
+			else false
+
+			endif
+
+		else false
+
+		endif
+
+		)
+
+	to o : RDM!AllValuesFromRestriction (
+
+		allValuesFromClass <- if i.formula.consequent.oclIsTypeOf(R2ML!ObjectClassificationAtom) then
+
+									thisModule.Class2Class(i.formula.consequent)
+
+							  else i.formula.consequent
+
+							  endif,
+
+		onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.formula.antecedent.referenceProperty)
+
+		)
+
+}
+
+
+
+rule ReferencePropertyAtomClass2HasValue {
+
+	from i : R2ML!ReferencePropertyAtom (
+
+			i.isRefPropAtomForHasValue and thisModule.getChildrenOfAllTopMostImplications()->excludes(i)
+
+		)
+
+	to o : RDM!HasValueRestriction (
+
+		hasValue <- thisModule.ObjectVariable2Individual(i.object),
+
+		onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.referenceProperty)
+
+		)
+
+}
+
+
+
+rule ReferencePropertyAtomClass2ClassAtomHasValue {
+
+	from i : R2ML!ReferencePropertyAtom (
+
+			i.isRefPropAtomForHasValue and thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'ClassAtom',
+
+		hasPredicateSymbol <- hvr,
+
+		terms <- thisModule.ObjectVariable2IndividualVariable(i.subject)
+
+		),
+
+	hvr : RDM!HasValueRestriction (
+
+		hasValue <- thisModule.ObjectVariable2Individual(i.object),
+
+		onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.referenceProperty)
+
+		)
+
+}
+
+
+
+unique lazy rule ObjectVariable2Individual {
+
+	from i : R2ML!ObjectVariable
+
+	to o : RDM!Individual (
+
+			name <- i.name
+
+		)		
+
+}
+
+
+
+rule AtLeastQuantifiedFormula2MinCardinalityRestriction {
+
+	from i : R2ML!AtLeastQuantifiedFormula (
+
+			i.oclIsTypeOf(R2ML!AtLeastQuantifiedFormula) and thisModule.getChildrenOfAllTopMostImplications()->excludes(i)
+
+		)
+
+	to o : RDM!MinCardinalityRestriction (
+
+		minCardinality <- card,
+
+		onProperty <- if i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom) then
+
+						thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+					  else thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+					  endif
+
+		),
+
+	   card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.minCardinality.toString()
+
+			)
+
+}
+
+
+
+rule AtLeastQuantifiedFormulaInClassAtom2MinCardinalityRestriction {
+
+	from i : R2ML!AtLeastQuantifiedFormula (
+
+			i.oclIsTypeOf(R2ML!AtLeastQuantifiedFormula) and i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom)
+
+			and thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'ClassAtom',
+
+			hasPredicateSymbol <- mcr,
+
+			terms <- thisModule.ObjectVariable2IndividualVariable(i.formula.subject)
+
+		),
+
+	  mcr : RDM!MinCardinalityRestriction (
+
+			minCardinality <- card,
+
+			onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+		),
+
+		card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.minCardinality.toString()
+
+		)
+
+}
+
+
+
+rule AtLeastQuantifiedFormulaInDataRangeAtom2MinCardinalityRestriction {
+
+	from i : R2ML!AtLeastQuantifiedFormula (
+
+			i.oclIsTypeOf(R2ML!AtLeastQuantifiedFormula) and i.formula.oclIsTypeOf(R2ML!AttributionAtom)
+
+			and thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'DataRangeAtom',
+
+			hasPredicateSymbol <- mcr,
+
+			terms <- thisModule.DataVariable2IndividualVariable(i.formula.dataValue)
+
+		),
+
+	  mcr : RDM!MinCardinalityRestriction (
+
+			minCardinality <- card,
+
+			onProperty <-thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+		),
+
+		card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.minCardinality.toString()
+
+		)
+
+}
+
+
+
+rule AtMostQuantifiedFormulaClass2MaxCardinalityRestriction {
+
+	from i : R2ML!AtMostQuantifiedFormula (
+
+			i.oclIsTypeOf(R2ML!AtMostQuantifiedFormula) and thisModule.getChildrenOfAllTopMostImplications()->excludes(i)
+
+		)
+
+	to o : RDM!MaxCardinalityRestriction (
+
+		maxCardinality <- card,
+
+		onProperty <- if i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom) then
+
+						thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+					  else thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+					  endif
+
+		),
+
+		card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+			)
+
+}
+
+
+
+rule AtMostQuantifiedFormulaInClassAtom2MaxCardinalityRestriction {
+
+	from i : R2ML!AtMostQuantifiedFormula (
+
+			i.oclIsTypeOf(R2ML!AtMostQuantifiedFormula) and i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom)
+
+			and thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'ClassAtom',
+
+			hasPredicateSymbol <- mcr,
+
+			terms <- thisModule.ObjectVariable2IndividualVariable(i.formula.subject)
+
+		),
+
+	  mcr : RDM!MaxCardinalityRestriction (
+
+			maxCardinality <- card,
+
+			onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+		),
+
+		card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+		)
+
+}
+
+
+
+rule AtMostQuantifiedFormulaInDataRangeAtom2MaxCardinalityRestriction {
+
+	from i : R2ML!AtMostQuantifiedFormula (
+
+			i.oclIsTypeOf(R2ML!AtMostQuantifiedFormula) and i.formula.oclIsTypeOf(R2ML!AttributionAtom)
+
+			and thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'DataRangeAtom',
+
+			hasPredicateSymbol <- mcr,
+
+			terms <- thisModule.DataVariable2IndividualVariable(i.formula.dataValue)
+
+		),
+
+	  mcr : RDM!MaxCardinalityRestriction (
+
+			maxCardinality <- card,
+
+			onProperty <- thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+		),
+
+		card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+		)
+
+}
+
+
+
+rule AtLeastAndAtMostQuantifiedFormulaClass2CardinalityRestriction {
+
+	from i : R2ML!AtLeastAndAtMostQuantifiedFormula (
+
+		i.oclIsTypeOf(R2ML!AtLeastAndAtMostQuantifiedFormula) and
+
+		i.maxCardinality = i.minCardinality and
+
+		thisModule.getChildrenOfAllTopMostImplications()->excludes(i)
+
+		)
+
+	to o : RDM!CardinalityRestriction (
+
+		cardinality <- card,
+
+		onProperty <- if i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom) then
+
+						thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+					  else thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+					  endif
+
+		),
+
+		card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+			)
+
+}
+
+
+
+rule AtLeastAndAtMostQuantifiedFormulaInClassAtom2CardinalityRestriction {
+
+	from i : R2ML!AtLeastAndAtMostQuantifiedFormula (
+
+			i.oclIsTypeOf(R2ML!AtLeastAndAtMostQuantifiedFormula) and i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom) and
+
+			i.maxCardinality = i.minCardinality and
+
+			thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'ClassAtom',
+
+			hasPredicateSymbol <- mcr,
+
+			terms <- thisModule.ObjectVariable2IndividualVariable(i.formula.subject)
+
+		),
+
+	  mcr : RDM!CardinalityRestriction (
+
+			cardinality <- card,
+
+			onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+		),
+
+		card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+		)
+
+}
+
+
+
+rule AtLeastAndAtMostQuantifiedFormulaInDataRangeAtom2CardinalityRestriction {
+
+	from i : R2ML!AtLeastAndAtMostQuantifiedFormula (
+
+			i.oclIsTypeOf(R2ML!AtLeastAndAtMostQuantifiedFormula) and i.formula.oclIsTypeOf(R2ML!AttributionAtom) and
+
+			i.maxCardinality = i.minCardinality and
+
+			thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'DataRangeAtom',
+
+			hasPredicateSymbol <- mcr,
+
+			terms <- thisModule.DataVariable2IndividualVariable(i.formula.dataValue)
+
+		),
+
+	  mcr : RDM!CardinalityRestriction (
+
+			cardinality <- card,
+
+			onProperty <- thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+		),
+
+		card : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+		)
+
+}
+
+
+
+rule AtLeastAndAtMostQuantifiedFormulaClass2MinMaxCardinalityRestriction {
+
+	from i : R2ML!AtLeastAndAtMostQuantifiedFormula (
+
+		i.oclIsTypeOf(R2ML!AtLeastAndAtMostQuantifiedFormula) and
+
+		i.maxCardinality <> i.minCardinality and
+
+		thisModule.getChildrenOfAllTopMostImplications()->excludes(i)
+
+		)
+
+	to o : RDM!MinCardinalityRestriction (
+
+		minCardinality <- cardMin,
+
+		onProperty <- if i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom) then
+
+						thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+					  else thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+					  endif
+
+		),
+
+		cardMin : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.minCardinality.toString()
+
+		),
+
+		u : RDM!MaxCardinalityRestriction (
+
+			maxCardinality <- cardMax,
+
+			onProperty <- if i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom) then
+
+							thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+					  	  else thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+					      endif
+
+		),
+
+		cardMax : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+		)
+
+}
+
+
+
+rule AtLeastAndAtMostQuantifiedFormulaClassAtom2MinMaxCardinalityRestriction {
+
+	from i : R2ML!AtLeastAndAtMostQuantifiedFormula (
+
+		i.oclIsTypeOf(R2ML!AtLeastAndAtMostQuantifiedFormula) and
+
+		i.formula.oclIsTypeOf(R2ML!ReferencePropertyAtom) and
+
+		i.maxCardinality <> i.minCardinality and
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'ClassAtom',
+
+			hasPredicateSymbol <- mcr,
+
+			terms <- thisModule.ObjectVariable2IndividualVariable(i.formula.subject)
+
+		),
+
+	
+
+	  mcr : RDM!MinCardinalityRestriction (
+
+		minCardinality <- cardMin,
+
+		onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+		),
+
+		cardMin : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.minCardinality.toString()
+
+		),
+
+		u : RDM!MaxCardinalityRestriction (
+
+			maxCardinality <- cardMax,
+
+			onProperty <- thisModule.ReferenceProperty2ObjectProperty(i.formula.referenceProperty)
+
+		),
+
+		cardMax : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+		)
+
+}
+
+
+
+rule AtLeastAndAtMostQuantifiedFormulaDataRangeAtom2MinMaxCardinalityRestriction {
+
+	from i : R2ML!AtLeastAndAtMostQuantifiedFormula (
+
+		i.oclIsTypeOf(R2ML!AtLeastAndAtMostQuantifiedFormula) and
+
+		i.formula.oclIsTypeOf(R2ML!AttributionAtom) and
+
+		i.maxCardinality <> i.minCardinality and
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+			name <- 'DataRangeAtom',
+
+			hasPredicateSymbol <- mcr,
+
+			terms <- thisModule.DataVariable2IndividualVariable(i.formula.dataValue)
+
+		),
+
+	  mcr : RDM!MinCardinalityRestriction (
+
+		minCardinality <- cardMin,
+
+		onProperty <- thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+		),
+
+		cardMin : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.minCardinality.toString()
+
+		),
+
+		u : RDM!MaxCardinalityRestriction (
+
+			maxCardinality <- cardMax,
+
+			onProperty <- thisModule.Attribute2DatatypeProperty(i.formula.attribute)
+
+		),
+
+		cardMax : RDM!TypedLiteral (
+
+			theType <- 'int',
+
+			lexicalForm <- i.maxCardinality.toString()
+
+		)
+
+}
+
+
+
+
+
+rule DataClassificationAtom2DataRangeAtomOneOf {
+
+	from i : R2ML!DataClassificationAtom (
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+	)
+
+	to o : RDM!Atom (
+
+		name <- 'DataRangeAtom',
+
+		hasPredicateSymbol <- dtr,
+
+		terms <- thisModule.DataVariable2IndividualVariable(i.term)
+
+		),
+
+		dtr : RDM!DataRange(
+
+			datatype <- i.type
+
+			)
+
+}
+
+
+
+rule DataClassificationAtom2DataRange {
+
+	from i : R2ML!DataClassificationAtom (
+
+		thisModule.getChildrenOfAllTopMostImplications()->excludes(i)
+
+	)
+
+	to dtr : RDM!DataRange(
+
+		datatype <- i.type
+
+		)
+
+}
+
+
+
+rule Disjunction2DataRangeAtom {
+
+	from i : R2ML!Disjunction (
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i) and
+
+		i.formulas->asSequence()->first().oclIsTypeOf(R2ML!DatatypePredicateAtom)
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'DataRangeAtom',
+
+		hasPredicateSymbol <- dtr,
+
+		terms <- Sequence{thisModule.DataVariable2IndividualVariable(i.formulas->asSequence()->first().getTerm)}
+
+		),
+
+		dtr : RDM!DataRange(
+
+			oneOf <- i.formulas
+
+			)
+
+}
+
+
+
+rule Disjunction2DataRange {
+
+	from i : R2ML!Disjunction (
+
+		thisModule.getChildrenOfAllTopMostImplications()->excludes(i) and
+
+		i.formulas->asSequence()->first().oclIsTypeOf(R2ML!DatatypePredicateAtom)
+
+		)
+
+	to o : RDM!DataRange (
+
+		oneOf <- i.formulas
+
+		)
+
+}
+
+
+
+rule Datatype2PrimitiveType {
+
+	from i : R2ML!Datatype (
+
+		i.oclIsTypeOf(R2ML!Datatype)
+
+		)
+
+	to o : RDM!PrimitiveType (
+
+		name <- i.name
+
+		)
+
+}
+
+
+
+rule PlainLiteral2PlainLiteral {
+
+	from i : R2ML!PlainLiteral (
+
+		i.oclIsTypeOf(R2ML!PlainLiteral) and 
+
+		thisModule.getChildrenOfAllTopMostImplications()->select(c | c.oclIsTypeOf(R2ML!AttributionAtom))->collect(c | c.value)->flatten()->excludes(i) and
+
+		R2ML!DatatypePredicateAtom.allInstancesFrom('IN')->asSequence()->collect(c | c.dataArguments)->flatten()->excludes(i)
+
+		)
+
+	to o : RDM!PlainLiteral (
+
+	    language <- i.languageTag,
+
+		lexicalForm <- i.lexicalValue
+
+		)
+
+}
+
+
+
+rule TypedLiteral2TypedLiteral {
+
+	from i : R2ML!TypedLiteral (
+
+		i.oclIsTypeOf(R2ML!TypedLiteral) 
+
+		and R2ML!DatatypePredicateAtom.allInstancesFrom('IN')->asSequence()->collect(c | c.dataArguments )->flatten()->excludes(i)
+
+		)
+
+	to o : RDM!TypedLiteral (
+
+			theType <- i.type.name,
+
+			lexicalForm <- i.lexicalValue
+
+		)
+
+}
+
+
+
+rule DatatypePredicateAtom2PlainLiteral {
+
+	from i : R2ML!DatatypePredicateAtom (
+
+		if i.dataArguments->select(c | c.oclIsTypeOf(R2ML!PlainLiteral))->size() > 0 and
+
+			R2ML!Disjunction.allInstancesFrom('IN')->asSequence()->collect(e | e.formulas)->flatten()->includes(i) and
+
+			i.dataArguments->select(c | c.oclIsTypeOf(R2ML!AttributeFunctionTerm))->size() = 0
+
+		then true
+
+		else false
+
+		endif
+
+		)
+
+	to o : RDM!PlainLiteral (
+
+		language <- i.dataArguments->select(c | c.oclIsKindOf(R2ML!DataLiteral))->asSequence()->first().languageTag,
+
+		lexicalForm <- i.dataArguments->select(c | c.oclIsKindOf(R2ML!DataLiteral))->asSequence()->first().lexicalValue
+
+		)
+
+}
+
+
+
+rule DatatypePredicateAtom2TypedLiteral {
+
+	from i : R2ML!DatatypePredicateAtom (
+
+		if i.dataArguments->select(c | c.oclIsTypeOf(R2ML!TypedLiteral))->size() > 0 and
+
+			R2ML!Disjunction.allInstancesFrom('IN')->asSequence()->collect(e | e.formulas)->flatten()->includes(i) and
+
+			i.dataArguments->select(c | c.oclIsTypeOf(R2ML!AttributeFunctionTerm))->size() = 0
+
+		then true
+
+		else false
+
+		endif
+
+		)
+
+	to o : RDM!TypedLiteral (
+
+		theType <- i.dataArguments->select(c | c.oclIsTypeOf(R2ML!TypedLiteral))->asSequence()->first().type.name,
+
+		lexicalForm <- i.dataArguments->select(c | c.oclIsTypeOf(R2ML!TypedLiteral))->asSequence()->first().lexicalValue
+
+		)
+
+}
+
+
+
+rule UniversallyQuantifiedFormulaData2AllValuesFromRestriction {
+
+	from i : R2ML!UniversallyQuantifiedFormula (
+
+		thisModule.getTopMostUniversallyQuantifiedFormulas()->excludes(i) and
+
+		thisModule.getChildrenOfAllTopMostImplications()->excludes(i) and
+
+		if i.formula.oclIsTypeOf(R2ML!Implication) then
+
+			if i.formula.antecedent.oclIsTypeOf(R2ML!AttributionAtom) then
+
+			true
+
+			else false
+
+			endif
+
+		else false
+
+		endif
+
+		)
+
+	to o : RDM!AllValuesFromRestriction (
+
+		allValuesFromRange <- i.formula.consequent,
+
+		onProperty <- thisModule.Attribute2DatatypeProperty(i.formula.antecedent.attribute)
+
+		)
+
+}
+
+
+
+rule UniversallyQuantifiedFormulaData2DataRangeAtomAllValuesFromRestriction {
+
+	from i : R2ML!UniversallyQuantifiedFormula (
+
+		thisModule.getTopMostUniversallyQuantifiedFormulas()->excludes(i) and
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i) and
+
+		if i.formula.oclIsTypeOf(R2ML!Implication) then
+
+			if i.formula.antecedent.oclIsTypeOf(R2ML!AttributionAtom) then
+
+			true
+
+			else false
+
+			endif
+
+		else false
+
+		endif
+
+		)
+
+	to dra : RDM!Atom (
+
+		name <- 'DataRangeAtom',
+
+		hasPredicateSymbol <- alr,
+
+		terms <- thisModule.DataVariable2IndividualVariable(i.formula.antecedent.getTerm)
+
+		),
+
+	alr : RDM!AllValuesFromRestriction (
+
+		allValuesFromRange <- i.formula.consequent,
+
+		onProperty <- thisModule.Attribute2DatatypeProperty(i.formula.antecedent.attribute)
+
+		)
+
+}
+
+
+
+rule ExistentiallyQuantifiedFormulaData2SomeValuesFromRestriction {
+
+	from i : R2ML!ExistentiallyQuantifiedFormula (
+
+		thisModule.getChildrenOfAllTopMostImplications()->excludes(i) and
+
+		if i.formula.oclIsTypeOf(R2ML!Conjuction) then
+
+			if i.formula.formulas->select(e | e.oclIsTypeOf(R2ML!AttributionAtom))->size() > 0 then
+
+			true
+
+			else false
+
+			endif
+
+		else false
+
+		endif
+
+		)
+
+	to o : RDM!SomeValuesFromRestriction (
+
+		someValuesFromRange <- i.formula.formulas->select(c | not c.oclIsTypeOf(R2ML!AttributionAtom))->first(),
+
+		onProperty <- thisModule.Attribute2DatatypeProperty(i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!AttributionAtom))->first().attribute)
+
+		)
+
+}
+
+
+
+rule ExistentiallyQuantifiedFormulaData2DataRangeAtomSomeValuesFromRestriction {
+
+	from i : R2ML!ExistentiallyQuantifiedFormula (
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i) and
+
+		if i.formula.oclIsTypeOf(R2ML!Conjuction) then
+
+			if i.formula.formulas->select(e | e.oclIsTypeOf(R2ML!AttributionAtom))->size() > 0 then
+
+			true
+
+			else false
+
+			endif
+
+		else false
+
+		endif
+
+		)
+
+	to dra : RDM!Atom (
+
+		name <- 'DataRangeAtom',
+
+		hasPredicateSymbol <- smr,
+
+		terms <- thisModule.DataVariable2IndividualVariable(i.formula.antecedent.getTerm)
+
+		),
+
+	smr : RDM!SomeValuesFromRestriction (
+
+		someValuesFromRange <- i.formula.formulas->select(c | not c.oclIsTypeOf(R2ML!AttributionAtom))->first(),
+
+		onProperty <- thisModule.Attribute2DatatypeProperty(i.formula.formulas->select(c | c.oclIsTypeOf(R2ML!AttributionAtom))->first().attribute)
+
+		)
+
+}
+
+
+
+unique lazy rule Attribute2DatatypeProperty {
+
+	from i : R2ML!Attribute
+
+	to o : RDM!DatatypeProperty (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+unique lazy rule TypedLiteral2DataValue {
+
+	from i : R2ML!TypedLiteral
+
+	to o : RDM!DataValue(
+
+			value <- i.lexicalValue,
+
+			type <- i.type
+
+		)
+
+}
+
+
+
+rule AttributeAtomData2DataValuedPropertyAtom {
+
+	from i : R2ML!AttributionAtom (
+
+		thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'DataValuedPropertyAtom',
+
+		hasPredicateSymbol <- thisModule.Attribute2DatatypeProperty(i.attribute),
+
+		terms <- if i.dataValue.oclIsTypeOf(R2ML!TypedLiteral) then
+
+					Sequence { thisModule.TypedLiteral2DataValue(i.dataValue),
+
+							   thisModule.ObjectVariable2IndividualVariable(i.subject)
+
+							 }
+
+				 else
+
+					Sequence { thisModule.DataVariable2DataVariable(i.dataValue),
+
+				 			   thisModule.ObjectVariable2IndividualVariable(i.subject)
+
+				 			 }
+
+				 endif
+
+		)
+
+}
+
+
+
+rule AttributionAtomData2HasValueRestriction {
+
+	from i : R2ML!AttributionAtom (
+
+		not thisModule.getChildrenOfAllTopMostImplications()->includes(i)
+
+		)
+
+	to o :  RDM!HasValueRestriction (
+
+			hasLiteralValue <- i.dataValue,
+
+			onProperty <- thisModule.Attribute2DatatypeProperty(i.attribute)
+
+		)
+
+}
+
+
+
+unique lazy rule DataVariable2DataVariable {
+
+	from i : R2ML!DataVariable
+
+	to o : RDM!DataVariable (
+
+			name <- i.name
+
+		)		
+
+}
+
+
+
+rule EqualityAtom2SameIndividualAtom {
+
+	from i : R2ML!EqualityAtom (
+
+		R2ML!Disjunction.allInstancesFrom('IN')->asSequence()->collect(e | e.formulas)->flatten()->excludes(i)
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'SameIndividualAtom',
+
+		hasPredicateSymbol <- same,
+
+		terms <- i.terms->select(e | e.oclIsTypeOf(R2ML!ObjectVariable))->collect(c | thisModule.ObjectVariable2IndividualVariable(c))			
+
+		),
+
+		same : RDM!SameAs
+
+}
+
+
+
+rule InequalityAtom2DifferentIndividualAtom {
+
+	from i : R2ML!InequalityAtom (
+
+		i.oclIsTypeOf(R2ML!InequalityAtom)
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'DifferentIndividualAtom',
+
+		hasPredicateSymbol <- different,
+
+		terms <- i.terms->select(e | e.oclIsTypeOf(R2ML!ObjectVariable))->collect(c | thisModule.ObjectVariable2IndividualVariable(c))			
+
+		),
+
+		different : RDM!DifferentFrom
+
+}
+
+
+
+rule DatatypePredicateAtom2BulitinAtom {
+
+	from i : R2ML!DatatypePredicateAtom (
+
+		R2ML!Disjunction.allInstancesFrom('IN')->asSequence()->collect(e | e.formulas)->flatten()->excludes(i) and
+
+		i.dataArguments->select(c | c.oclIsTypeOf(R2ML!AttributeFunctionTerm))->size() = 0 and
+
+		i.dataArguments->select(c | c.oclIsTypeOf(R2ML!DataOperationTerm))->size() = 0
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'BulitinAtom',
+
+		hasPredicateSymbol <- thisModule.DatatypePredicate2BuiltIn(i.predicate),
+
+		terms <-  Sequence { i.dataArguments->select(e | e.oclIsKindOf(R2ML!DataVariable))->collect(c | thisModule.DataVariable2DataVariable(c)),
+
+							 i.dataArguments->select(e | e.oclIsKindOf(R2ML!TypedLiteral))->collect(c | thisModule.TypedLiteral2DataValue(c))							
+
+						    }
+
+		)
+
+}
+
+
+
+unique lazy rule DatatypePredicate2BuiltIn {
+
+	from i : R2ML!DatatypePredicate 
+
+	to o : RDM!BuiltIn (
+
+		buildInID <- i.name
+
+		)
+
+}
+
+
+
+
+
+rule ObjectVariable2ClassAtom {
+
+	from i : R2ML!ObjectVariable (
+
+		R2ML!AttributeFunctionTerm.allInstancesFrom('IN')->collect(c | c.contextArgument)->flatten()->includes(i) or
+
+		R2ML!ReferencePropertyFunctionTerm.allInstancesFrom('IN')->collect(c | c.contextArgument)->flatten()->includes(i) or
+
+		R2ML!DataOperationTerm.allInstancesFrom('IN')->collect(c | c.contextArgument)->flatten()->includes(i)
+
+	)
+
+	to o : RDM!Atom (
+
+		name <- 'ClassAtom',
+
+		hasPredicateSymbol <- thisModule.Class2Class(i.classRef),
+
+		terms <- thisModule.ObjectVariable2IndividualVariable(i)
+
+		)
+
+}
+
+
+
+rule AttributeFunctionTerm2IndividualPropertyAtom {
+
+	from i : R2ML!AttributeFunctionTerm (
+
+		i.oclIsTypeOf(R2ML!AttributeFunctionTerm)
+
+	)
+
+	to o : RDM!Atom (
+
+		name <- 'IndividualPropertyAtom',
+
+		hasPredicateSymbol <- thisModule.Attribute2ObjectProperty(i.attribute),
+
+		terms <- Sequence { if i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable) then
+
+					               			thisModule.ObjectVariable2IndividualVariable(i.contextArgument)
+
+			  				             else thisModule.ReferencePropertyFunctionTerm2IndividualVariable(i.contextArgument)
+
+				            			 endif,
+
+						    			 thisModule.AttributeFunctionTerm2IndividualVariable(i)
+
+				}
+
+		)
+
+}
+
+
+
+rule DatatypePredicateAtomWithAttributeFuncTerm2BuiltinAtom {
+
+	from i : R2ML!DatatypePredicateAtom (
+
+		i.dataArguments->select(c | c.oclIsTypeOf(R2ML!AttributeFunctionTerm))->size() = 1 or
+
+		i.dataArguments->select(c | c.oclIsTypeOf(R2ML!DataOperationTerm))->size() = 1
+
+	)
+
+	to o :  RDM!Atom (
+
+		name <- 'BulitinAtom',
+
+		hasPredicateSymbol <- thisModule.DatatypePredicate2BuiltIn(i.predicate),
+
+		terms <-  Sequence {
+
+					i.dataArguments->select(e | e.oclIsKindOf(R2ML!AttributeFunctionTerm))->asSequence()->collect(c | thisModule.AttributeFunctionTerm2IndividualVariable(c)),
+
+					i.dataArguments->select(e | e.oclIsKindOf(R2ML!DataOperationTerm))->asSequence()->collect(c | thisModule.DataOperationTerm2IndividualVariable(c)),
+
+				 	i.dataArguments->select(e | e.oclIsKindOf(R2ML!TypedLiteral))->collect(c | thisModule.TypedLiteral2DataValue(c))							
+
+				  }
+
+		)
+
+}
+
+
+
+rule ReferencePropertyFunctionTerm2IndividualPropertyAtom {
+
+	from i : R2ML!ReferencePropertyFunctionTerm (
+
+		i.oclIsTypeOf(R2ML!ReferencePropertyFunctionTerm)
+
+	)
+
+	to o : RDM!Atom (
+
+		name <- 'IndividualPropertyAtom',
+
+		hasPredicateSymbol <- thisModule.ReferenceProperty2ObjectProperty(i.referencePropertyRef),
+
+		terms <- Sequence {
+
+							if i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable) then
+
+								thisModule.ObjectVariable2IndividualVariable(i.contextArgument)
+
+							else thisModule.ReferencePropertyFunctionTerm2IndividualVariable(i.contextVariable)
+
+							endif,
+
+						    thisModule.ReferencePropertyFunctionTerm2IndividualVariable(i)
+
+				}
+
+		)
+
+}
+
+
+
+rule DataOperationTerm2IndividualPropertyAtom {
+
+	from i : R2ML!DataOperationTerm (
+
+		i.oclIsTypeOf(R2ML!DataOperationTerm)
+
+	)
+
+	to o : RDM!Atom (
+
+		name <- 'IndividualPropertyAtom',
+
+		hasPredicateSymbol <- thisModule.DataOperation2ObjectProperty(i.dataOperationRef),
+
+		terms <- Sequence {
+
+							thisModule.ObjectVariable2IndividualVariable(i.contextArgument),
+
+						    thisModule.DataOperationTerm2IndividualVariable(i)
+
+				}
+
+		)
+
+}
+
+
+
+rule ReferencePropertyAtom2IndividualPropertyAtoms {
+
+	from i : R2ML!ReferencePropertyAtom (
+
+		not i.isRefPropAtomForHasValue and not i.areAllObjectVariables()
+
+		)
+
+	to o : RDM!Atom (
+
+		name <- 'IndividualPropertyAtom',
+
+		hasPredicateSymbol <- thisModule.ReferenceProperty2ObjectProperty(i.referenceProperty),
+
+		terms <- Sequence { if i.subject.oclIsTypeOf(R2ML!ObjectVariable) then
+
+					               				thisModule.ObjectVariable2IndividualVariable(i.subject)
+
+			 				             else thisModule.ReferencePropertyFunctionTerm2IndividualVariable(i.subject)
+
+				            			 endif,
+
+										 if i.object.oclIsTypeOf(R2ML!ObjectVariable) then
+
+					               			    thisModule.ObjectVariable2IndividualVariable(i.object)
+
+				            			else thisModule.ReferencePropertyFunctionTerm2IndividualVariable(i.object)
+
+				            			endif
+
+						}
+
+		)
+
+}
+
+
+
+unique lazy rule DataOperation2ObjectProperty {
+
+	from i : R2ML!DataOperation
+
+	to o : RDM!ObjectProperty (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+unique lazy rule Attribute2ObjectProperty {
+
+	from i : R2ML!Attribute
+
+	to o : RDM!ObjectProperty (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+unique lazy rule ReferencePropertyFunctionTerm2IndividualVariable {
+
+	from i : R2ML!ReferencePropertyFunctionTerm
+
+	to o : RDM!IndividualVariable (
+
+			name <- if i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable) then
+
+								i.contextArgument.name + i.referencePropertyRef.name.firstCharToUpper()
+
+								
+						  else i.contextArgument.getVariableName() + i.attribute.name.firstCharToUpper()
+
+					      endif
+
+		)
+
+}
+
+
+
+unique lazy rule DataOperationTerm2IndividualVariable {
+
+	from i : R2ML!DataOperationTerm
+
+	to o : RDM!IndividualVariable (
+
+			name <- if i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable) then
+
+								i.contextArgument.name + i.dataOperationRef.name.firstCharToUpper()
+
+					      else 'Unknow'
+
+					      endif
+
+		)
+
+}
+
+
+
+unique lazy rule AttributeFunctionTerm2IndividualVariable {
+
+	from i : R2ML!AttributeFunctionTerm
+
+	to o : RDM!IndividualVariable (
+
+			name <- if i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable) then 
+
+								i.contextArgument.name + i.attribute.name.firstCharToUpper()
+
+							   
+						  else i.contextArgument.getVariableName() + i.attribute.name.firstCharToUpper()
+
+					      endif
+
+	)
+
+}

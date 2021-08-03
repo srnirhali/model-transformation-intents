@@ -1,0 +1,403 @@
+
+
+library QMOOD4UML2; 
+
+
+uses FLAME4UML2;
+
+
+
+
+
+helper context UML2!Package
+
+def : DSC() : Integer =
+
+	self.CN();
+
+
+
+helper context UML2!Package
+
+def : NOH() : Integer =
+
+	self.allClasses->collect(c|c.children)->flatten()->asSet()->size();
+
+
+
+helper context UML2!Package
+
+def : NIC() : Integer =
+
+	self.allClasses->select(c|c.isLeaf)->size();
+
+
+
+helper context UML2!Package
+
+def : NSI() : Integer =
+
+	self.allClasses->iterate(c; acc : Integer = 0|
+
+		if c.PARN() = 1
+
+			then acc + 1
+
+			else acc
+
+		endif);
+
+
+
+helper context UML2!Package
+
+def : NNC() : Integer =
+
+	self.NOH();
+
+
+
+helper context UML2!Package
+
+def : NAC() : Integer =
+
+	self.allClasses->select(c|c.isAbstract)->size();
+
+
+
+helper context UML2!Package
+
+def : NLC() : Integer =
+
+	self.allClasses->select(c|c.isLeaf)->size();
+
+
+
+helper context UML2!Package
+
+def : ADI() : Real =
+
+	self.allClasses->iterate(c; acc : Real = 0|(acc + c.DIT()) / self.CN());
+
+
+
+helper context UML2!Package
+
+def : AWI() : Real =
+
+	self.allClasses->iterate(c; acc : Real = 0|(acc + c.CHIN()) / self.CN());
+
+
+
+helper context UML2!Package
+
+def : ANA() : Real =
+
+	if self.CN() > 0
+
+		then self.internalBaseClasses->size() / self.CN()
+
+		else 0
+
+	endif;
+
+
+
+
+
+helper context UML2!Class
+
+def : MFA() : Integer =
+
+	if self.AON() > 0
+
+		then self.ION() / self.allOperations->iterate(o; acc : Integer = 0|
+
+			if self.FCV(o)
+
+				then acc + 1
+
+				else acc
+
+			endif)
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Class
+
+def : MAA() : Integer =
+
+	let nbFCV : Integer =
+
+		self.allAttributes->iterate(a; acc : Integer = 0|
+
+			if self.FCV(a)
+
+				then acc + 1
+
+				else acc
+
+			endif) in
+
+	if nbFCV > 0
+
+		then self.IAN() / nbFCV
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Class
+
+def : MAT() : Integer =
+
+	(self.MFA() + self.MAA()) / 2;
+
+
+
+helper context UML2!Class
+
+def : MOA() : Integer =
+
+	let owner : UML2!Package = self.owner in
+
+	if not owner.oclIsUndefined()
+
+		then self.allAttributes->iterate(a; acc: Integer = 0|
+
+			if owner.allClasses->includes(a.type)
+
+				then acc + 1
+
+				else acc
+
+			endif)
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Class
+
+def : MRM() : Integer =
+
+	self.DCC() + self.NAD();
+
+
+
+helper context UML2!Class
+
+def : DAM() : Integer =
+
+	if self.AAN() > 0
+
+		then self.PRIAN() / self.AAN()
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Class
+
+def : OAM() : Integer =
+
+	if self.AON() > 0
+
+		then self.PUBON() / self.AON()
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Class
+
+def : MAM() : Integer =
+
+	((1 - self.DAM()) + self.OAM()) / 2;
+
+
+
+helper context UML2!Class
+
+def : NOA() : Integer =
+
+	self.ASCN();
+
+
+
+helper context UML2!Class
+
+def : NOM() : Integer =
+
+	self.AON();
+
+
+
+helper context UML2!Class
+
+def : CIS() : Integer =
+
+	self.PUBON();
+
+
+
+helper context UML2!Class
+
+def : NPT() : Integer =
+
+	self.allParametersTypes->size();
+
+
+
+helper context UML2!Class
+
+def : NPM() : Integer =
+
+	if self.AON() > 0
+
+		then self.allParameters->size() / self.AON()
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Class
+
+def : NOD() : Integer =
+
+	self.AAN();
+
+
+
+helper context UML2!Class
+
+def : NAD() : Integer =
+
+	self.allAttributesTypes->size();
+
+
+
+helper context UML2!Class
+
+def : NPA() : Integer =
+
+	self.PUBAN();
+
+
+
+helper context UML2!Class
+
+def : CSM() : Integer =
+
+	self.AAN() + self.AON();
+
+
+
+helper context UML2!Class
+
+def : CAM() : Integer =
+
+	let divisor : Integer =
+
+		self.AON() * self.allParametersTypes->size() in
+
+	if divisor > 0
+
+		then self.allOperations->iterate(o; acc : Integer = 0|
+
+			acc + o.allParametersTypes->size()) / divisor
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Class
+
+def : DCC() : Integer =
+
+	self.allAttributesTypes->union(self.allParametersTypes)->size();
+
+
+
+helper context UML2!Class
+
+def : MCC() : Integer =
+
+	self.allAttributesTypes->union(self.allParametersTypes)->
+
+		iterate(t; acc : Sequence(UML2!Class) = Sequence{}|
+
+			acc->union(t.allAttributesTypes)->union(t.allParametersTypes))->
+
+				asSet()->size();
+
+
+
+helper context UML2!Class
+
+def : DAC() : Integer =
+
+	self.allAttributesTypes->size();
+
+
+
+helper context UML2!Class
+
+def : DPC() : Integer =
+
+	self.allParametersTypes->size();
+
+
+
+helper context UML2!Class
+
+def : MPC() : Integer =
+
+	self.allParametersTypes->
+
+		iterate(t; acc : Sequence(UML2!Class) = Sequence{}|
+
+			acc->union(t.allParametersTypes))->asSet()->size();
+
+
+
+helper context UML2!Class
+
+def : CCD() : Integer =
+
+	self.AAN() + self.allAttributesTypes->iterate(t; acc : Integer = 0|
+
+			acc + t.AAN());
+
+
+
+helper context UML2!Class
+
+def : CCP() : Integer =
+
+	self.allParameters->size();
+
+
+
+helper context UML2!Class
+
+def : CCM() : Integer =
+
+	self.CCD() + self.CCP();
+

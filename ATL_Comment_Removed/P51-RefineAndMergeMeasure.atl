@@ -1,0 +1,75 @@
+
+
+module RefineAndMergeMeasure; 
+create OUT : Measure from IN1 : Measure, IN2 : Measure;
+
+
+
+rule RefineMetamodelMeasureSet {
+
+	from
+
+		mmMeasSet:Measure!MetamodelMeasureSet
+
+	to
+
+		refinedMmMeasSet:Measure!MetamodelMeasureSet (
+
+			elementType <- mmMeasSet.elementType,
+
+			elementName <- mmMeasSet.elementName,
+
+			measures <- mmMeasSet.measures->
+
+				select(meas|meas.oclIsTypeOf(Measure!SimpleMeasure))->
+
+					iterate(meas; acc:Sequence(Measure!SimpleMeasure)=Sequence{}|
+
+						acc->append(thisModule.CopySimpleMeasure(meas)))
+
+		)
+
+}
+
+
+
+lazy rule CopySimpleMeasure {
+
+	from
+
+		meas:Measure!SimpleMeasure
+
+	to
+
+		copyMeas:Measure!SimpleMeasure (
+
+			metric <- thisModule.CopyMetric(meas.metric),
+
+			unit <- meas.unit,
+
+			value <- meas.value
+
+		)
+
+}
+
+
+
+lazy rule CopyMetric {
+
+	from
+
+		metric:Measure!Metric
+
+	to
+
+		copyMetric:Measure!Metric (
+
+			shortName <- metric.shortName,
+
+			name <- metric.name
+
+		)
+
+}
+

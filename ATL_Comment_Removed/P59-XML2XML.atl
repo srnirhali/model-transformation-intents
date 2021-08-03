@@ -1,0 +1,162 @@
+
+
+module XML2XML;
+
+create OUT : XML from IN : XML;
+
+
+
+
+
+
+
+helper context XML!Node def: toKeep : Boolean =
+
+	if self.oclIsTypeOf(XML!Text)
+
+	then
+
+		self.value.trim() <> ''
+
+	else
+
+		false
+
+	endif;
+
+
+
+
+
+
+
+rule Attribute {
+
+	from
+
+        i : XML!Attribute
+
+	to
+
+		o : XML!Attribute (
+
+			startLine <- i.startLine,
+
+			endLine <- i.endLine,
+
+			startColumn <- i.startColumn,
+
+			endColumn <- i.endColumn,
+
+			name <- i.name,
+
+			value <- i.value,
+
+			parent <- i.parent
+
+	)
+
+}
+
+
+
+rule Text {
+
+	from
+
+        i : XML!Text (
+
+			i.value.trim() <> ''
+
+		)
+
+	to
+
+		o : XML!Text (
+
+			startLine <- i.startLine,
+
+			endLine <- i.endLine,
+
+			startColumn <- i.startColumn,
+
+			endColumn <- i.endColumn,
+
+			name <- i.name,
+
+			value <- i.value,
+
+			parent <- i.parent
+
+	)
+
+}
+
+
+
+rule Element {
+
+	from
+
+        i : XML!Element (
+
+        	i.oclIsTypeOf(XML!Element)
+
+        )
+
+	to
+
+		o : XML!Element (
+
+			startLine <- i.startLine,
+
+			endLine <- i.endLine,
+
+			startColumn <- i.startColumn,
+
+			endColumn <- i.endColumn,
+
+			name <- i.name,
+
+			value <- i.value,
+
+			parent <- i.parent,
+
+			children <- i.children->select(e | e.toKeep)
+
+	)
+
+}
+
+
+
+rule Root {
+
+	from
+
+        i : XML!Root
+
+	to
+
+		o : XML!Root (
+
+			startLine <- i.startLine,
+
+			endLine <- i.endLine,
+
+			startColumn <- i.startColumn,
+
+			endColumn <- i.endColumn,
+
+			name <- i.name,
+
+			value <- i.value,
+
+			parent <- i.parent,
+
+			children <- i.children->select(e | e.toKeep)
+
+	)
+
+}
+

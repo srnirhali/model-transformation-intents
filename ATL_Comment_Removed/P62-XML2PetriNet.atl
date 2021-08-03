@@ -1,0 +1,286 @@
+module XML2PetriNet;
+
+create OUT : PetriNet from IN : XML;
+
+
+
+
+
+
+
+
+
+helper def: allPlaces : Set(XML!Element) = 
+
+	XML!Element.allInstances()
+
+		->select(e | e.name = 'place');
+
+
+
+
+
+helper def: allTransitions : Set(XML!Element) = 
+
+	XML!Element.allInstances()
+
+		->select(e | e.name = 'transition');
+
+
+
+
+
+helper def: allArcs : Set(XML!Element) = 
+
+	XML!Element.allInstances()
+
+		->select(e | e.name = 'arc');
+
+
+
+
+
+helper context XML!Element def : getName() : String =
+
+	self.children
+
+		->select(c | c.oclIsTypeOf(XML!Element) and c.name = 'name')
+
+		->first().children
+
+		->select(c | c.oclIsTypeOf(XML!Element) and c.name = 'text')
+
+		->first().children
+
+		->first().value;
+
+
+
+
+
+helper context XML!Element def : getAttributeValue(name : String) : String = 
+
+	self.children
+
+		->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = name)
+
+		->first().value;
+
+
+
+
+
+helper context XML!Element def : getId() : String =
+
+	self.getAttributeValue('id');
+
+
+
+
+
+helper context XML!Element def : getTarget() : String =
+
+	self.getAttributeValue('target');
+
+
+
+
+
+helper context XML!Element def : getSource() : String =
+
+	self.getAttributeValue('source');
+
+
+
+
+
+
+
+
+
+rule Main {
+
+	from
+
+        xml_net : XML!Element (
+
+        	xml_net.name = 'net'
+
+        )
+
+	to 
+
+		pn : PetriNet!PetriNet (
+
+			name <- xml_net.getName(),
+
+			places <- thisModule.allPlaces,
+
+			transitions <- thisModule.allTransitions,
+
+			arcs <- thisModule.allArcs
+
+		)
+
+}
+
+
+
+
+
+rule Place {
+
+	from
+
+        xml_place :  XML!Element (
+
+        	xml_place.name = 'place'
+
+        )
+
+	to 
+
+		pn_p : PetriNet!Place (
+
+			name <- xml_place.getName(),
+
+			incoming <- thisModule.allArcs
+
+							->select(a | a.getTarget() = xml_place.getId()),
+
+			outgoing <- thisModule.allArcs
+
+							->select(a | a.getSource() = xml_place.getId())
+
+		)
+
+}
+
+
+
+
+
+rule Transition {
+
+	from
+
+        xml_trans :  XML!Element (
+
+        	xml_trans.name = 'transition'
+
+        )
+
+	to
+
+		pn_t : PetriNet!Transition (
+
+			name <- '',
+
+			incoming <- thisModule.allArcs
+
+							->select(a | a.getTarget() = xml_trans.getId()),
+
+			outgoing <- thisModule.allArcs
+
+							->select(a | a.getSource() = xml_trans.getId())
+
+		)
+
+}
+
+
+
+
+
+rule PlaceToTransArc {
+
+	from
+
+        xml_arc :  XML!Element (
+
+        	if xml_arc.name = 'arc' then
+
+				thisModule.allPlaces
+
+					->collect(p | p.getId())
+
+					->includes(xml_arc.getSource())
+
+			else
+
+				false
+
+			endif
+
+        )
+
+	to
+
+		pn_a : PetriNet!PlaceToTransArc (
+
+			weight <- 1,
+
+			source <- thisModule.allPlaces
+
+						->select(b | b.getId() = xml_arc.getSource())
+
+						->first(),
+
+			target <- thisModule.allTransitions
+
+						->select(b | b.getId() = xml_arc.getTarget())
+
+						->first()
+
+		)
+
+}
+
+
+
+
+
+rule TransToPlaceArc {
+
+	from
+
+        xml_arc :  XML!Element (
+
+        	if xml_arc.name = 'arc' then
+
+				thisModule.allTransitions
+
+					->collect(p | p.getId())
+
+					->includes(xml_arc.getSource())
+
+			else
+
+				false
+
+			endif
+
+        )
+
+	to
+
+		pn_a : PetriNet!TransToPlaceArc (
+
+			weight <- 1,
+
+			source <- thisModule.allTransitions
+
+						->select(b | b.getId() = xml_arc.getSource())
+
+						->first(),
+
+			target <- thisModule.allPlaces
+
+						->select(b | b.getId() = xml_arc.getTarget())
+
+						->first()
+
+		)
+
+}
+

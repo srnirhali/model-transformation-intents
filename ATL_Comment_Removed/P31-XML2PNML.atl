@@ -1,0 +1,279 @@
+module XML2PNML;
+
+create OUT : PNML from IN : XML;
+
+
+
+helper context XML!Element def: getAttrVal(name : String) : String =
+
+	let a : Sequence(XML!Attribute) = self.children->select(c | c.oclIsTypeOf(XML!Attribute) and c.name = name) in
+
+	if a.isEmpty() then 
+
+		''
+
+	else
+
+		a.first().value
+
+	endif;
+
+
+
+helper context XML!Element def : getName() : String =
+
+	self.children->select(c | c.oclIsTypeOf(XML!Element) and c.name = 'name')->first().children
+
+		->select(d | d.oclIsTypeOf(XML!Element) and d.name = 'text')->first().children
+
+		->select(e | e.oclIsKindOf(XML!Text))->first().value;
+
+
+
+helper def: getLink(id : String) : XML!Element =
+
+	XML!Element.allInstances()->select(z | z.getAttrVal('id') = id)->first();
+
+
+
+
+
+rule PNMLDocument {
+
+	from
+
+		x : XML!Root
+
+	to
+
+		document : PNML!PNMLDocument
+
+		(
+
+			xmlns <- uri
+
+		),
+
+		uri : PNML!URI
+
+		(
+
+			value <- x.getAttrVal('xmlns')
+
+		)
+
+}
+
+
+
+rule Net {
+
+	from
+
+		x : XML!Element
+
+		(
+
+			x.name = 'net'
+
+		)
+
+	to
+
+		net_element : PNML!NetElement
+
+		(
+
+			name <- named_element,
+
+			type <- type_uri,
+
+			
+			document <- x.parent
+
+		),
+
+		type_uri : PNML!URI
+
+		(
+
+			value <- x.getAttrVal('type')
+
+		),
+
+		named_element : PNML!Name
+
+		(
+
+			labels <- label
+
+		),
+
+		label : PNML!Label
+
+		(
+
+			text <- x.getName()
+
+		)
+
+}
+
+
+
+rule Place {
+
+	from
+
+		x : XML!Element
+
+		(
+
+			x.name = 'place'
+
+		)
+
+	to
+
+		n : PNML!Place
+
+		(
+
+			name <- named_element,
+
+			
+			net <- x.parent,
+
+			id <- x.getAttrVal('id'),
+
+			location <- ''
+
+		),
+
+		named_element : PNML!Name
+
+		(
+
+			labels <- label
+
+		),
+
+		label : PNML!Label
+
+		(
+
+			text <- x.getName()
+
+		)
+
+}
+
+
+
+rule Transition {
+
+	from
+
+		x : XML!Element
+
+		(
+
+			x.name = 'transition'
+
+		)
+
+	to
+
+		n : PNML!Transition
+
+		(
+
+			name <- named_element,
+
+			
+			net <- x.parent,
+
+			id <- x.getAttrVal('id')		
+
+		),
+
+		named_element : PNML!Name
+
+		(
+
+			labels <- label
+
+		),
+
+		label : PNML!Label
+
+		(
+
+			text <- x.getName()
+
+		)
+
+}
+
+
+
+rule Arc {
+
+	from
+
+		x : XML!Element
+
+		(
+
+			x.name = 'arc'
+
+		)
+
+	to
+
+		n : PNML!Arc
+
+		(
+
+			name <- named_element,
+
+			id <- x.getAttrVal('id'),
+
+			net <- x.parent,
+
+			
+			source <- thisModule.getLink(
+
+				(x.children->select(c | c.oclIsKindOf(XML!Attribute) and c.name = 'source')->first().value)	
+
+			),
+
+			
+			target <- thisModule.getLink(
+
+				(x.children->select(c | c.oclIsKindOf(XML!Attribute) and c.name = 'target')->first().value)	
+
+			)
+
+			
+
+		),
+
+		named_element : PNML!Name
+
+		(
+
+			labels <- label
+
+		),
+
+		label : PNML!Label
+
+		(
+
+			text <- x.getName()
+
+		)
+
+}
+

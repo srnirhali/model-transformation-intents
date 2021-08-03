@@ -1,0 +1,50 @@
+
+
+library Lib4MMTree;
+
+
+
+helper context MMTree!Node def : isTreeNodeRoot() : Boolean =
+
+	self.refImmediateComposite().oclIsUndefined();
+
+	
+	
+
+
+helper context MMTree!Node def : getAllChildren () : OrderedSet(MMTree!TreeElement) =
+
+	self.children->iterate( child ; elements : OrderedSet(MMTree!TreeElement) = 
+
+		OrderedSet{} | 
+
+		if child.oclIsTypeOf(MMTree!Node) then
+
+			elements.union(child.getAllChildren()) 
+		else
+
+			elements.append(child) 
+		endif
+
+		)
+
+	;
+
+
+
+helper context MMTree!Node def : getLeavesInOrder() : OrderedSet (MMTree!Leaf) =
+
+	let leavesList : OrderedSet (MMTree!Leaf) = 
+
+		self.getAllChildren ()->select(currChild | currChild.oclIsTypeOf(MMTree!Leaf))
+
+	in 
+
+		leavesList->select(leaf | leaf.size = #big)
+
+		->union(leavesList->select(leaf | leaf.size = #medium))
+
+		->union(leavesList->select(leaf | leaf.size = #small))
+
+	;
+

@@ -1,0 +1,1827 @@
+
+
+module XML2KML; 
+create OUT : KML from IN : XML;
+
+
+
+helper context XML!Element def : getAttrVal(name : String) : String =
+
+	if self.children->select (c|c.oclIsTypeOf(XML!Attribute))->select(c|c.name = name)->notEmpty()
+
+		then self.children->select (c|c.oclIsTypeOf(XML!Attribute))->select(c|c.name = name)->first().value
+
+		else ''
+
+	endif;
+
+
+
+helper context XML!Element def : getChildren(seq : Sequence(String)) : Sequence(XML!Element) =
+
+	self.children->select(e|e.oclIsKindOf(XML!Element))->select(e|seq->includes(e.name));
+
+
+
+helper context XML!Element def : getText() : Sequence(XML!Text) =
+
+	self.children->select(t|t.oclIsKindOf(XML!Text))->select(t|t.name = '#text')->select(t|t.value.trim() <> '');
+
+
+
+helper context XML!Element def : getAllText() : String =
+
+	self.getText()->iterate(s ; str : String = '' | str.concat(s.value.trim()).concat(' '));
+
+
+
+helper context XML!Element def : getValue() : String =
+
+	self.getText()->first().value.trim();
+
+
+
+
+
+rule Address {
+
+	from e:XML!Element (
+
+		e.name = 'address'
+
+	)
+
+	to adr:KML!Address (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule AltitudeMode {
+
+	from e:XML!Element (
+
+		e.name = 'altitudeMode'
+
+	)
+
+	to altMode:KML!AltitudeMode (
+
+		name <- e.name,
+
+		value <- if e.getValue() = 'relativeToGround'
+
+					then #relativeToGround
+
+					else if e.getValue() = 'absolute'
+
+							then #absolute
+
+							else #clampedToGround
+
+						endif
+
+				 endif
+
+	)
+
+}
+
+
+
+rule BalloonStyle {
+
+	from e:XML!Element (
+
+		e.name = 'BalloonStyle'
+
+	)
+
+	to ball:KML!BalloonStyle (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'text', 'textColor', 'color'})
+
+	)
+
+}
+
+
+
+rule Color {
+
+	from e:XML!Element (
+
+		e.name = 'color'
+
+	)
+
+	to color:KML!Color (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule ColorMode {
+
+	from e:XML!Element (
+
+		e.name = 'colorMode'
+
+	)
+
+	to colMode:KML!ColorMode (
+
+		name <- e.name,
+
+		value <- if e.getValue() = 'random'
+
+					then #random
+
+					else #normal
+
+				 endif
+
+	)
+
+}
+
+
+
+rule Cookie {
+
+	from e:XML!Element (
+
+		e.name = 'cookie'
+
+	)
+
+	to cook:KML!Cookie (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Coordinates {
+
+	from e:XML!Element (
+
+		e.name = 'coordinates'
+
+	)
+
+	to coords:KML!Coordinates (
+
+		name <- e.name,
+
+		nodes <- coord
+
+	),
+
+	coord: distinct KML!Coordinate foreach (c in e.getText()) (
+
+		name <- c.value.trim()
+
+	)
+
+}
+
+
+
+rule Description {
+
+	from e:XML!Element (
+
+		e.name = 'description'
+
+	)
+
+	to desc:KML!Description (
+
+		name <- e.name,
+
+		value <- e.getAllText()
+
+	)
+
+}
+
+
+
+rule Document {
+
+	from e:XML!Element (
+
+		e.name = 'Document'
+
+	)
+
+	to doc:KML!Document (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'description', 'Document', 'Folder', 'GroundOverlay', 'name', 'LookAt', 'NetworkLink', 'NetworkLinkControl', 'Placemark', 'ScreenOverlay', 'Style', 'StyleMap', 'visibility'})
+
+	)
+
+}
+
+
+
+rule DrawOrder {
+
+	from e:XML!Element (
+
+		e.name = 'drawOrder'
+
+	)
+
+	to dOrder:KML!DrawOrder (
+
+		name <- e.name,
+
+		value <- e.getValue().toInteger()
+
+	)
+
+}
+
+
+
+rule East {
+
+	from e:XML!Element (
+
+		e.name = 'east'
+
+	)
+
+	to east:KML!East (
+
+		name <- e.name,
+
+		value <- e.getValue().toReal()
+
+	)
+
+}
+
+
+
+rule Extrude {
+
+	from e:XML!Element (
+
+		e.name = 'extrude'
+
+	)
+
+	to extr:KML!Extrude (
+
+		name <- e.name,
+
+		value <- if e.getValue() = '1'
+
+					then true
+
+					else false
+
+				 endif
+
+	)
+
+}
+
+
+
+rule Fill {
+
+	from e:XML!Element (
+
+		e.name = 'fill'
+
+	)
+
+	to fill:KML!Fill (
+
+		name <- e.name,
+
+		value <- if e.getValue() = '0'
+
+					then false
+
+					else true
+
+				 endif
+
+	)
+
+}
+
+
+
+rule Folder {
+
+	from e:XML!Element (
+
+		e.name = 'Folder'
+
+	)
+
+	to fd:KML!Folder (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'description', 'Document', 'Folder', 'GroundOverlay', 'LookAt', 'name', 'NetworkLink', 'open', 'Placemark', 'ScreenOverlay', 'Style', 'visibility'})
+
+	)
+
+}
+
+
+
+rule GroundOverlay {
+
+	from e:XML!Element (
+
+		e.name = 'GroundOverlay'
+
+	)
+
+	to go:KML!GroundOverlay (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'description', 'color', 'drawOrder', 'Icon', 'LatLonBox', 'LookAt', 'name', 'visibility'})
+
+	)
+
+}
+
+
+
+rule H {
+
+	from e:XML!Element (
+
+		e.name = 'h'
+
+	)
+
+	to h:KML!H (
+
+		name <- e.name,
+
+		value <- e.getValue().toInteger()
+
+	)
+
+}
+
+
+
+rule Heading {
+
+	from e:XML!Element (
+
+		e.name = 'heading'
+
+	)
+
+	to hding:KML!Heading (
+
+		name <- e.name,
+
+		value <- e.getValue().toReal()
+
+	)
+
+}
+
+
+
+rule Href {
+
+	from e:XML!Element (
+
+		e.name = 'href'
+
+	)
+
+	to href:KML!Href (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Icon {
+
+	from e:XML!Element (
+
+		e.name = 'Icon'
+
+	)
+
+	to icon:KML!Icon (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'h', 'href', 'refreshMode', 'viewRefreshMode', 'w', 'x', 'y'})
+
+	)
+
+}
+
+
+
+rule IconStyle {
+
+	from e:XML!Element (
+
+		e.name = 'IconStyle'
+
+	)
+
+	to iconS:KML!IconStyle (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'color', 'colorMode', 'heading', 'Icon', 'scale'})
+
+	)
+
+}
+
+
+
+rule InnerBoundaryIs {
+
+	from e:XML!Element (
+
+		e.name = 'innerBoundaryIs'
+
+	)
+
+	to inner:KML!InnerBoundaryIs (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'LinearRing'})
+
+	)
+
+}
+
+
+
+rule Key {
+
+	from e:XML!Element (
+
+		e.name = 'key'
+
+	)
+
+	to key:KML!Key (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule LabelStyle {
+
+	from e:XML!Element (
+
+		e.name = 'LabelStyle'
+
+	)
+
+	to labelS:KML!LabelStyle (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'color', 'colorMode', 'scale'})
+
+	)
+
+}
+
+
+
+rule Latitude {
+
+	from e:XML!Element (
+
+		e.name = 'latitude'
+
+	)
+
+	to lat:KML!Latitude (
+
+		name <- e.name,
+
+		value <- e.getValue().toReal()
+
+	)
+
+}
+
+
+
+rule LatLonBox {
+
+	from e:XML!Element (
+
+		e.name = 'LatLonBox'
+
+	)
+
+	to llb:KML!LatLonBox (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'east', 'west', 'north', 'south', 'rotation'})
+
+	)
+
+}
+
+
+
+rule LinearRing {
+
+	from e:XML!Element (
+
+		e.name = 'LinearRing'
+
+	)
+
+	to lr:KML!LinearRing (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'coordinates'})
+
+	)
+
+}
+
+
+
+rule LineString {
+
+	from e:XML!Element (
+
+		e.name = 'LineString'
+
+	)
+
+	to ls:KML!LineString (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'coordinates', 'tessellate', 'extrude', 'altitudeMode'})
+
+	)
+
+}
+
+
+
+rule LineStyle {
+
+	from e:XML!Element (
+
+		e.name = 'LineStyle'
+
+	)
+
+	to lineS:KML!LineStyle (
+
+		name <- e.name,
+
+		id <- e.getAttrVal('id'),
+
+		nodes <- e.getChildren(Sequence{'color', 'colorMode', 'width'})
+
+	)
+
+}
+
+
+
+rule LinkDescription {
+
+	from e:XML!Element (
+
+		e.name = 'linkDescription'
+
+	)
+
+	to lDesc:KML!LinkDescription (
+
+		name <- e.name,
+
+		value <- e.getAllText()	
+
+	)
+
+}
+
+
+
+rule LinkName {
+
+	from e:XML!Element (
+
+		e.name = 'LinkName'
+
+	)
+
+	to lName:KML!LinkName (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Longitude {
+
+	from e:XML!Element (
+
+		e.name = 'longitude'
+
+	)
+
+	to long:KML!Longitude (
+
+		name <- e.name,
+
+		value <- e.getValue().toReal()
+
+	)
+
+}
+
+
+
+rule LookAt {
+
+	from e:XML!Element (
+
+		e.name = 'LookAt'
+
+	)
+
+	to la:KML!LookAt (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'heading', 'latitude', 'longitude', 'range', 'tilt'})
+
+	)
+
+}
+
+
+
+rule Message {
+
+	from e:XML!Element (
+
+		e.name = 'message'
+
+	)
+
+	to msg:KML!Message (
+
+		name <- e.name,
+
+		nodes <- text
+
+	),
+
+	text: distinct KML!TextNode foreach (txt in e.getText()) (
+
+		name <- txt.value		
+
+	)
+
+}
+
+
+
+rule MinRefreshPeriod {
+
+	from e:XML!Element (
+
+		e.name = 'minRefreshPeriod'
+
+	)
+
+	to minRP:KML!MinRefreshPeriod (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule MultiGeometry {
+
+	from e:XML!Element (
+
+		e.name = 'MultiGeometry'
+
+	)
+
+	to mgeo:KML!MultiGeometry (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'LineString', 'MultiGeometry', 'Point', 'Polygon'})
+
+	)
+
+}
+
+
+
+rule Name {
+
+	from e:XML!Element (
+
+		e.name = 'name'
+
+	)
+
+	to name:KML!Name (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule NetworkLink {
+
+	from e:XML!Element (
+
+		e.name = 'NetworkLink'
+
+	)
+
+	to netLink:KML!NetworkLink (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'description', 'name', 'refreshVisibility', 'Url', 'visibility'}),
+
+		nodes <- ftv
+
+	),
+
+	
+	ftv:KML!FlyToView (
+
+		name <- 'flyToView',
+
+		value <- if e.getChildren(Sequence{'flyToView'})->notEmpty()
+
+					then if e.getChildren(Sequence{'flyToView'})->first().getValue() = '1'
+
+							then true
+
+							else false
+
+						 endif
+
+					else false
+
+				 endif
+
+	)
+
+	
+}
+
+
+
+rule NetworkLinkControl {
+
+	from e:XML!Element (
+
+		e.name = 'NetworkLinkControl'
+
+	)
+
+	to netLinCtrlk:KML!NetworkLinkControl (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'cookie', 'linkDescription', 'linkName', 'message', 'minRefreshPeriod'})
+
+	)
+
+}
+
+
+
+rule North {
+
+	from e:XML!Element (
+
+		e.name = 'north'
+
+	)
+
+	to north:KML!North (
+
+		name <- e.name,
+
+		value <- e.getValue().toReal()
+
+	)
+
+}
+
+
+
+rule ObjArrayField {
+
+	from e:XML!Element (
+
+		e.name = 'ObjArrayField'
+
+	)
+
+	to objAF:KML!ObjArrayField (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'name', 'type'})
+
+	)
+
+}
+
+
+
+rule ObjField {
+
+	from e:XML!Element (
+
+		e.name = 'ObjField'
+
+	)
+
+	to objF:KML!ObjField (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'name', 'type'})
+
+	)
+
+}
+
+
+
+rule Open {
+
+	from e:XML!Element (
+
+		e.name = 'open'
+
+	)
+
+	to open:KML!Open (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule OuterBoundaryIs {
+
+	from e:XML!Element (
+
+		e.name = 'outerBoundaryIs'
+
+	)
+
+	to outerBI:KML!OuterBoundaryIs (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'LinearRing'})
+
+	)
+
+}
+
+
+
+rule Outline {
+
+	from e:XML!Element (
+
+		e.name = 'outline'
+
+	)
+
+	to out:KML!Outline (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule OverlayXY {
+
+	from e:XML!Element (
+
+		e.name = 'overlayXY'
+
+	)
+
+	to over:KML!OverlayXY (
+
+		name <- e.name,
+
+		x <- e.getAttrVal('x'),
+
+		y <- e.getAttrVal('y'),
+
+		xunits <- e.getAttrVal('xunits'),
+
+		yunits <- e.getAttrVal('yunits')
+
+	)
+
+}
+
+
+
+rule Pair {
+
+	from e:XML!Element (
+
+		e.name = 'Pair'
+
+	)
+
+	to pair:KML!Pair (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'key', 'styleUrl'})
+
+	)
+
+}
+
+
+
+rule Parent {
+
+	from e:XML!Element (
+
+		e.name = 'parent'
+
+	)
+
+	to parent:KML!Parent (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Placemark {
+
+	from e:XML!Element (
+
+		e.name = 'Placemark'
+
+	)
+
+	to pmk:KML!Placemark (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'address', 'description', 'LookAt', 'LineString', 'MultiGeometry', 'name', 'Point', 'Polygon', 'Snippet', 'Style', 'styleUrl', 'visibility'})
+
+	)
+
+}
+
+
+
+rule Point {
+
+	from e:XML!Element (
+
+		e.name = 'Point'
+
+	)
+
+	to pt:KML!Point (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'coordinates', 'tessallate', 'extrude', 'altitudeMode'})
+
+	)
+
+}
+
+
+
+rule Polygon {
+
+	from e:XML!Element (
+
+		e.name = 'Polygon'
+
+	)
+
+	to poly:KML!Polygon (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'outerBoundaryIs', 'innerBoundaryIs', 'tessellate', 'extrude', 'altitudeMode'})
+
+	)
+
+}
+
+
+
+rule PolyStyle {
+
+	from e:XML!Element (
+
+		e.name = 'PolyStyle'
+
+	)
+
+	to polyS:KML!PolyStyle (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'color', 'colorMode', 'fill', 'outline'})
+
+	)
+
+}
+
+
+
+rule Range {
+
+	from e:XML!Element (
+
+		e.name = 'range'
+
+	)
+
+	to rng:KML!Range (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule RefreshInterval {
+
+	from e:XML!Element (
+
+		e.name = 'refreshInterval'
+
+	)
+
+	to refrI:KML!RefreshInterval (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule RefreshMode {
+
+	from e:XML!Element (
+
+		e.name = 'refreshMode'
+
+	)
+
+	to refrM:KML!RefreshMode (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule RefreshVisibility {
+
+	from e:XML!Element (
+
+		e.name = 'refreshVisibility'
+
+	)
+
+	to refrV:KML!RefreshVisibility (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Rotation {
+
+	from e:XML!Element (
+
+		e.name = 'rotation'
+
+	)
+
+	to rot:KML!Rotation (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Schema {
+
+	from e:XML!Element (
+
+		e.name = 'Schema'
+
+	)
+
+	to schema:KML!Schema (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'name', 'parent', 'ObjField', 'ObjArrayField', 'SimpleField', 'SimpleArrayField'})
+
+	)
+
+}
+
+
+
+rule Scale {
+
+	from e:XML!Element (
+
+		e.name = 'scale'
+
+	)
+
+	to scale:KML!Scale (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule ScreenOverlay {
+
+	from e:XML!Element (
+
+		e.name = 'ScreenOverlay'
+
+	)
+
+	to scrO:KML!ScreenOverlay (
+
+		name <- e.name,
+
+		id <- e.getAttrVal('id'),
+
+		nodes <- e.getChildren(Sequence{'description', 'drawOrder', 'Icon', 'overlayXY', 'rotation', 'screenXY', 'size', 'name', 'visibility'})
+
+	)
+
+}
+
+
+
+rule ScreenXY {
+
+	from e:XML!Element (
+
+		e.name = 'screenXY'
+
+	)
+
+	to scrXY:KML!ScreenXY (
+
+		name <- e.name,
+
+		x <- e.getAttrVal('x'),
+
+		y <- e.getAttrVal('y'),
+
+		xunits <- e.getAttrVal('xunits'),
+
+		yunits <- e.getAttrVal('yunits')
+
+	)
+
+}
+
+
+
+rule SimpleArrayField {
+
+	from e:XML!Element (
+
+		e.name = 'SimpleArrayField'
+
+	)
+
+	to sAF:KML!SimpleArrayField (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'name', 'type'})
+
+	)
+
+}
+
+
+
+rule SimpleField {
+
+	from e:XML!Element (
+
+		e.name = 'SimpleField'
+
+	)
+
+	to sF:KML!SimpleField (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'name', 'type'})
+
+	)
+
+}
+
+
+
+rule Size {
+
+	from e:XML!Element (
+
+		e.name = 'size'
+
+	)
+
+	to size:KML!Size (
+
+		name <- e.name,
+
+		x <- e.getAttrVal('x'),
+
+		y <- e.getAttrVal('y'),
+
+		xunits <- e.getAttrVal('xunits'),
+
+		yunits <- e.getAttrVal('yunits')
+
+	)
+
+}
+
+
+
+rule South {
+
+	from e:XML!Element (
+
+		e.name = 'south'
+
+	)
+
+	to south:KML!South (
+
+		name <- e.name,
+
+		value <- e.getValue().toReal()
+
+	)
+
+}
+
+
+
+rule Snippet {
+
+	from e:XML!Element (
+
+		e.name = 'Snippet'
+
+	)
+
+	to snip:KML!Snippet (
+
+		name <- e.name,
+
+		nodes <- text
+
+	),
+
+	text: distinct KML!TextNode foreach (txt in e.getText()) (
+
+		name <- txt.value		
+
+	)
+
+}
+
+
+
+rule Style {
+
+	from e:XML!Element (
+
+		e.name = 'Style'
+
+	)
+
+	to style:KML!Style (
+
+		name <- e.name,
+
+		id <- e.getAttrVal('id'),
+
+		nodes <- e.getChildren(Sequence{'BalloonStyle', 'IconStyle', 'LabelStyle', 'LineStyle', 'PolyStyle'})
+
+	)
+
+}
+
+
+
+rule StyleMap {
+
+	from e:XML!Element (
+
+		e.name = 'StyleMap'
+
+	)
+
+	to sMap:KML!StyleMap (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'Pair'})
+
+	)
+
+}
+
+
+
+rule StyleUrl {
+
+	from e:XML!Element (
+
+		e.name = 'styleUrl'
+
+	)
+
+	to sURL:KML!StyleUrl (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Tessellate {
+
+	from e:XML!Element (
+
+		e.name = 'tessellate'
+
+	)
+
+	to tess:KML!Tessellate (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Text {
+
+	from e:XML!Element (
+
+		e.name = 'text'
+
+	)
+
+	to txt:KML!Text (
+
+		name <- e.name,
+
+		nodes <- text,
+
+		nodes <- e.getChildren(Sequence{'textColor'})
+
+	),
+
+	text: distinct KML!TextNode foreach (txt in e.getText()) (
+
+		name <- txt.value		
+
+	)
+
+}
+
+
+
+rule TextColor {
+
+	from e:XML!Element (
+
+		e.name = 'textColor'
+
+	)
+
+	to txtColor:KML!TextColor (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Tilt {
+
+	from e:XML!Element (
+
+		e.name = 'tilt'
+
+	)
+
+	to tilt:KML!Tilt (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Type {
+
+	from e:XML!Element (
+
+		e.name = 'type'
+
+	)
+
+	to type:KML!Type (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Url {
+
+	from e:XML!Element (
+
+		e.name = 'Url'
+
+	)
+
+	to url:KML!Url (
+
+		name <- e.name,
+
+		nodes <- e.getChildren(Sequence{'href', 'refreshInterval', 'refreshMode', 'ViewFormat', 'viewRefreshMode', 'viewRefreshTime'})
+
+	)
+
+}
+
+
+
+rule ViewBoundScale {
+
+	from e:XML!Element (
+
+		e.name = 'viewBoundScale'
+
+	)
+
+	to viewBS:KML!ViewBoundScale (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule ViewRefreshMode {
+
+	from e:XML!Element (
+
+		e.name = 'viewRefreshMode'
+
+	)
+
+	to viewRM:KML!ViewRefreshMode (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule ViewRefreshTime {
+
+	from e:XML!Element (
+
+		e.name = 'viewRefreshTime'
+
+	)
+
+	to viewRT:KML!ViewRefreshTime (
+
+		name <- e.name,
+
+		value <- e.getValue().toInteger()
+
+	)
+
+}
+
+
+
+rule ViewFormat {
+
+	from e:XML!Element (
+
+		e.name = 'viewFormat'
+
+	)
+
+	to viewF:KML!ViewFormat (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule Visibility {
+
+	from e:XML!Element (
+
+		e.name = 'visibility'
+
+	)
+
+	to vis:KML!Visibility (
+
+		name <- e.name,
+
+		value <- e.getValue()
+
+	)
+
+}
+
+
+
+rule W {
+
+	from e:XML!Element (
+
+		e.name = 'w'
+
+	)
+
+	to w:KML!W (
+
+		name <- e.name,
+
+		value <- e.getValue().toInteger()
+
+	)
+
+}
+
+
+
+rule West {
+
+	from e:XML!Element (
+
+		e.name = 'west'
+
+	)
+
+	to west:KML!West (
+
+		name <- e.name,
+
+		value <- e.getValue().toReal()
+
+	)
+
+}
+
+
+
+rule Width {
+
+	from e:XML!Element (
+
+		e.name = 'width'
+
+	)
+
+	to width:KML!Width (
+
+		name <- e.name,
+
+		value <- e.getValue().toReal()
+
+	)
+
+}
+
+
+
+rule X {
+
+	from e:XML!Element (
+
+		e.name = 'x'
+
+	)
+
+	to x:KML!X (
+
+		name <- e.name,
+
+		value <- e.getValue().toInteger()
+
+	)
+
+}
+
+
+
+rule Y {
+
+	from e:XML!Element (
+
+		e.name = 'y'
+
+	)
+
+	to y:KML!Y (
+
+		name <- e.name,
+
+		value <- e.getValue().toInteger()
+
+	)
+
+}
+

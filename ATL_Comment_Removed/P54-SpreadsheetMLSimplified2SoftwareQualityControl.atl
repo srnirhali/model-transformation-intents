@@ -1,0 +1,264 @@
+module SpreadsheetMLSimplified2SoftwareQualityControl; 
+create OUT : SoftwareQualityControl from IN : SpreadsheetMLSimplified;
+
+
+
+
+
+helper context SpreadsheetMLSimplified!Worksheet def: getStringValueByRowAndCell(rowNb : Integer, cellNb : Integer) : String =
+
+	self.ws_table.t_rows->at(rowNb).r_cells->at(cellNb).c_data.value.value;
+
+	
+
+
+
+helper context SpreadsheetMLSimplified!Worksheet def: getOptStringValueByRowAndCell(rowNb : Integer, cellNb : Integer) : String =
+
+	let d : SpreadsheetMLSimplified!Data = self.ws_table.t_rows->at(rowNb).r_cells->at(cellNb).c_data
+
+	in
+
+		if d.oclIsUndefined()
+
+		then
+
+			String
+
+		else
+
+			d.value.value
+
+		endif;
+
+
+
+
+
+helper context SpreadsheetMLSimplified!Row def: getStringValueByColumn(colNb : Integer) : String =
+
+	let d : SpreadsheetMLSimplified!Data = self.r_cells->at(colNb).c_data
+
+	in
+
+		if d.oclIsUndefined()
+
+		then
+
+			String
+
+		else
+
+			d.value.value
+
+		endif;
+
+
+
+
+
+helper def: getBugStatus(st : String) : SoftwareQualityControl!BugStatusType =
+
+	if ( not st.oclIsUndefined() )
+
+	then
+
+		if st = 'open'
+
+		then
+
+			#bst_open
+
+		else
+
+			if st = 'closed'
+
+			then
+
+				#bst_closed
+
+			else
+
+				if st = 'skipped'
+
+				then
+
+					#bst_skipped
+
+				else
+
+					#bst_open
+
+				endif
+
+			endif
+
+		endif
+
+	else
+
+		#bst_open
+
+	endif;
+
+	
+
+
+
+
+
+rule Workbook2ControlsSequence {
+
+	from
+
+		wb : SpreadsheetMLSimplified!Workbook
+
+	
+
+	to
+
+		cs : SoftwareQualityControl!ControlsSequence (
+
+			controls <- wb.wb_worksheets->collect(e | thisModule.resolveTemp(e, 'c'))
+
+		)	
+
+}
+
+
+
+
+
+rule Worksheet2Control {
+
+	from
+
+		ws : SpreadsheetMLSimplified!Worksheet
+
+	
+
+	using {
+
+		controlDate : SpreadsheetMLSimplified!DateTimeType = ws.ws_table.t_rows->at(7).r_cells->at(2).c_data.value.value;
+
+	}
+
+
+
+	to
+
+		c : SoftwareQualityControl!Control (
+
+			responsible <- ws.getStringValueByRowAndCell(1,2),
+
+			component <- ws.getStringValueByRowAndCell(3,2),
+
+			developmentPhase <- ws.getStringValueByRowAndCell(5,2),
+
+			scope <- ws.getStringValueByRowAndCell(6,2),
+
+			date <- d,
+
+			controlledElt <- ws.getOptStringValueByRowAndCell(2,3),
+
+			eltRef <- ws.getOptStringValueByRowAndCell(4,1),
+
+			eltAuthor <- ws.getOptStringValueByRowAndCell(6,3),
+
+			formRef <- ws.getOptStringValueByRowAndCell(2,4)
+
+		),	
+
+		d : SoftwareQualityControl!Date (
+
+			day <- controlDate.day,
+
+			month <- controlDate.month,
+
+			year <- controlDate.year
+
+		)
+
+}
+
+
+
+
+
+rule BugTracking {
+
+	from
+
+		btt : SpreadsheetMLSimplified!Table (
+
+			btt.t_rows->at(2).r_cells->at(2).c_data.value.value='Bug Tracking'	
+
+		)
+
+
+
+	to
+
+		bt : SoftwareQualityControl!BugTracking (
+
+			ct_control <- Sequence{btt.t_worksheet}->collect(e | thisModule.resolveTemp(e, 'c'))->first()
+
+		)
+
+}
+
+
+
+rule Bug {
+
+	from
+
+		row : SpreadsheetMLSimplified!Row (
+
+			let d : SpreadsheetMLSimplified!Data = row.r_cells->at(1).c_data
+
+			in
+
+				if d.oclIsUndefined()
+
+				then
+
+					false
+
+				else
+
+					d.value.oclIsTypeOf(SpreadsheetMLSimplified!NumberValue)
+
+				endif
+
+		)
+
+
+
+	to
+
+		bug : SoftwareQualityControl!Bug(
+
+			b_bugTracking <- Sequence{row.r_table}->collect(e | thisModule.resolveTemp(e, 'bt'))->first(),
+
+			number <- row.r_cells->at(1).c_data.value.value.round(),
+
+			componentVersion <- row.getStringValueByColumn(2),
+
+			description <- row.getStringValueByColumn(3),
+
+			status <- thisModule.getBugStatus(row.getStringValueByColumn(4)),
+
+			originator <- row.getStringValueByColumn(5),
+
+			responsible <- row.getStringValueByColumn(6),
+
+			commentsAnswers <- row.getStringValueByColumn(7),
+
+			openDate <- row.getStringValueByColumn(8),
+
+			closeDate <- row.getStringValueByColumn(9)
+
+		)
+
+}

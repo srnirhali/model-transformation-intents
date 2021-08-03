@@ -1,0 +1,148 @@
+
+
+module Replace; 
+create OUT : KM3 from IN : KM3;
+
+
+
+rule Metamodel {
+
+	from
+
+		inputMm:KM3!Metamodel
+
+	to
+
+		outputMm:KM3!Metamodel (
+
+			location <- inputMm.location,
+
+			contents <- inputMm.contents
+
+		)
+
+}
+
+
+
+rule Package {
+
+	from
+
+		inputPkg:KM3!Package
+
+	to
+
+		outputPkg:KM3!Package (
+
+			name <- inputPkg.name,
+
+			contents <- inputPkg.contents
+
+		)
+
+}
+
+
+
+rule ClassA {
+
+	from
+
+		inputA:KM3!Class (
+
+			inputA.supertypes.isEmpty()
+
+		)
+
+	to
+
+		outputA:KM3!Class (
+
+			name <- inputA.name,
+
+			isAbstract <- inputA.isAbstract
+
+		)
+
+}
+
+
+
+rule ClassB {
+
+	from
+
+		inputB:KM3!Class (
+
+			not(inputB.supertypes.isEmpty())
+
+		)
+
+	to
+
+		outputB:KM3!Class (
+
+			name <- inputB.name,
+
+			isAbstract <- inputB.isAbstract,
+
+			structuralFeatures <- inputB.supertypes->iterate(a;acc : Sequence(KM3!StructuralFeature) = Sequence{}|
+
+																acc->including(thisModule.Inherit2Association(a,inputB))
+
+															)
+
+		)
+
+}
+
+
+
+
+
+lazy rule Inherit2Association {
+
+	from
+
+		supertype:KM3!Class,
+
+		children:KM3!Class
+
+	to
+
+		refChildren : KM3!Reference (
+
+			name <- 'inherit'+supertype.name,
+
+			opposite <- refSupertype,
+
+			owner <- children,
+
+			type <- supertype,
+
+			lower <- 1,
+
+			upper <- 1
+
+		),
+
+
+
+		refSupertype : KM3!Reference( 
+
+			name <- 'children'+children.name,
+
+			opposite <- refChildren,
+
+			owner <- supertype,
+
+			type <- children,
+
+			lower <- 1,
+
+			upper <- 1
+
+		)	
+
+}

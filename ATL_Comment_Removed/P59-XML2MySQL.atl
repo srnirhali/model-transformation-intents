@@ -1,0 +1,426 @@
+
+
+module XML2MySQL;
+
+create OUT : MySQL from IN : XML;
+
+
+
+
+
+
+
+helper def: rootElt : XML!Root =
+
+	XML!Root.allInstances()->asSequence()->first();
+
+
+
+helper context XML!Element def: getAttrVal(name : String) : String =
+
+    self.children
+
+		->select(c | c.oclIsKindOf(XML!Attribute) and c.name = name)
+
+		->first().value;
+
+
+
+helper context XML!Element
+
+	def: getElementsByName(name : String) : Set(XML!Element) =
+
+	self.children->select(c | c.oclIsKindOf(XML!Element) and c.name = name);
+
+
+
+helper context XML!Element
+
+	def: getFirstElementByName(name : String) : XML!Element =
+
+	self.getElementsByName(name)->first();
+
+
+
+helper context XML!Element def: getTextValue() : String =
+
+	if self.children->isEmpty()
+
+	then
+
+		''
+
+	else
+
+		if self.children->first().oclIsUndefined()
+
+		then
+
+			''
+
+		else
+
+			self.children->first().value
+
+		endif
+
+	endif;
+
+
+
+helper context String def: isIntegerType() : Boolean =
+
+	self.startsWith('tinyint') or self.startsWith('int');
+
+
+
+helper context String def: getItemListRec(it : String) : Sequence(String) =
+
+	let char : String = self.substring(1, 1) in
+
+	if self.size() = 1
+
+	then
+
+		Sequence{}
+
+	else
+
+		if char = ','
+
+		then
+
+			self.substring(2, self.size()).getItemListRec('')
+
+		else
+
+			if char = '\''
+
+			then
+
+				if it = ''
+
+				then
+
+					self.substring(2, self.size()).getItemListRec('')
+
+				else
+
+					Sequence{
+
+						it,
+
+						self.substring(2, self.size()).getItemListRec('')
+
+					}->flatten()
+
+				endif
+
+			else
+
+				self.substring(2, self.size()).getItemListRec(it.concat(char))
+
+			endif
+
+		endif
+
+	endif;
+
+		
+
+helper context String def: getItemList() : Sequence(String) =
+
+	let list : String = self.substring(6, self.size()) in
+
+	list.getItemListRec('');
+
+
+
+helper context String def: getTypeNameRec() : String =
+
+	let char : String = self.substring(1, 1) in
+
+	if self.size() = 1
+
+	then
+
+		''
+
+	else
+
+		if char = '(' or char = ' '
+
+		then
+
+			''
+
+		else
+
+			char.concat( self.substring(2, self.size()).getTypeNameRec() )
+
+		endif
+
+	endif;
+
+
+
+helper context String def: getTypeName() : String =
+
+	self.concat('#').getTypeNameRec();
+
+
+
+
+
+
+
+rule DataBase {
+
+	from
+
+        i : XML!Root
+
+	to
+
+		o : MySQL!DataBase (
+
+			name <- i.getAttrVal('name'),
+
+			tables <- XML!Element.allInstances()
+
+						->select(e | e.name = 'WINDEV_TABLE')
+
+		)
+
+}
+
+
+
+
+
+rule Table {
+
+	from
+
+        i : XML!Element (
+
+        	i.name = 'WINDEV_TABLE'
+
+        )
+
+	to
+
+		o : MySQL!Table (
+
+			name <- i.getAttrVal('name'),
+
+			columns <-
+
+				i.getElementsByName('TableInfoTable')->asSequence()
+
+					->select(e |
+
+						e.getFirstElementByName('Type').getTextValue().startsWith('tinyint')
+
+					),
+
+			database <- thisModule.rootElt
+
+		)
+
+}
+
+
+
+
+
+rule IntegerColumn {
+
+	from
+
+        i : XML!Element (
+
+        	if i.name = 'TableInfoTable'
+
+			then
+
+				i.getFirstElementByName('Type').getTextValue().isIntegerType()
+
+			else
+
+				false
+
+			endif
+
+        )
+
+	to
+
+		o : MySQL!IntegerColumn (
+
+			name <- i.getFirstElementByName('Field').getTextValue(),
+
+			type <-
+
+				i.getFirstElementByName('Type').getTextValue().getTypeName(),
+
+			isPrimaryKey <-
+
+				i.getFirstElementByName('Key').getTextValue() = 'PRI',
+
+			null <- i.getFirstElementByName('Null').getTextValue() = 'YES',
+
+			defaultValue <- i.getFirstElementByName('Default').getTextValue(),
+
+			comment <- i.getFirstElementByName('Comment').getTextValue(),
+
+			isAutoIncrement <-
+
+				i.getFirstElementByName('Extra').getTextValue() = 'auto_increment',
+
+			table <- i.parent
+
+		)
+
+}
+
+
+
+
+
+rule EnumColumn {
+
+	from
+
+        i : XML!Element (
+
+        	if i.name = 'TableInfoTable'
+
+			then
+
+				i.getFirstElementByName('Type').getTextValue().startsWith('enum')
+
+			else
+
+				false
+
+			endif
+
+        )
+
+	using {
+
+       	items : Sequence(String) =
+
+       		i.getFirstElementByName('Type').getTextValue().getItemList();
+
+	}
+
+	to
+
+		o : MySQL!EnumColumn (
+
+			name <- i.getFirstElementByName('Field').getTextValue(),
+
+			type <- 'enum',
+
+			isPrimaryKey <-
+
+				i.getFirstElementByName('Key').getTextValue() = 'PRI',
+
+			null <- i.getFirstElementByName('Null').getTextValue() = 'YES',
+
+			defaultValue <- i.getFirstElementByName('Default').getTextValue(),
+
+			comment <- i.getFirstElementByName('Comment').getTextValue(),
+
+			table <- i.parent,
+
+			enumSet <- e1
+
+		),
+
+		e1 : MySQL!EnumSet (
+
+			enumItems <- items -> collect(it | thisModule.EnumItems(it, e1))
+
+		)
+
+}
+
+
+
+lazy rule EnumItems {
+
+	from
+
+		item: String,
+
+		e1: MySQL!EnumSet 
+
+	to
+
+		e2: MySQL!EnumItem (
+
+			name <- item,
+
+			enumSet <- e1
+
+		)
+
+}
+
+
+
+
+
+rule Column {
+
+	from
+
+        i : XML!Element (
+
+        	if i.name = 'TableInfoTable'
+
+			then
+
+				let type : String =
+
+					i.getFirstElementByName('Type').getTextValue() in
+
+				not type.isIntegerType() and not type.startsWith('enum')
+
+			else
+
+				false
+
+			endif
+
+        )
+
+	to
+
+		o : MySQL!Column (
+
+			name <- i.getFirstElementByName('Field').getTextValue(),
+
+			type <-
+
+				i.getFirstElementByName('Type').getTextValue().getTypeName(),
+
+			isPrimaryKey <-
+
+				i.getFirstElementByName('Key').getTextValue() = 'PRI',
+
+			null <- i.getFirstElementByName('Null').getTextValue() = 'YES',
+
+			defaultValue <- i.getFirstElementByName('Default').getTextValue(),
+
+			comment <- i.getFirstElementByName('Comment').getTextValue(),
+
+			table <- i.parent
+
+		)
+
+}
+

@@ -1,0 +1,843 @@
+module UML2MOF;
+
+create OUT : MOF from IN : UML;
+
+
+
+
+
+uses strings;
+
+
+
+
+
+
+
+helper def: getVisibility(v : UML!VisibilityKind) : MOF!VisibilityKind =
+
+	if v = #vk_public
+
+	then
+
+		#public_vis
+
+	else
+
+		if v = #vk_private
+
+		then
+
+			#private_vis
+
+		else
+
+			if v = #vk_protected
+
+			then
+
+				#protected_vis
+
+			else
+
+				#public_vis	
+			endif
+
+		endif
+
+	endif;
+
+
+
+helper context UML!ModelElement def: getMOFVisibility() : MOF!VisibilityKind =
+
+	let v : UML!VisibilityKind = self.visibility in
+
+	if not v.oclIsUndefined()
+
+	then
+
+		thisModule.getVisibility(v)
+
+	else
+
+		#public_vis
+
+	endif;
+
+
+
+helper context UML!Feature def: getMOFScope() : MOF!ScopeKind =
+
+	if self.ownerScope = #sk_instance
+
+	then
+
+		#instance_level
+
+	else
+
+		#classifier_level
+
+	endif;
+
+
+
+helper context UML!ModelElement def: getIsChangeable() : Boolean =
+
+	(self.changeability = #ck_changeable);
+
+
+
+helper context UML!ModelElement def: getMOFIsChangeable() : Boolean =
+
+	if not self.changeability.oclIsUndefined()
+
+	then
+
+		self.getIsChangeable()
+
+	else
+
+		true
+
+	endif;
+
+
+
+helper def: getMultiplicity(m : UML!Multiplicity,
+
+							o : UML!OrderingKind,
+
+							isUnique : Boolean) :
+
+							TupleType(lower : Integer,
+
+									  upper : Integer,
+
+									  isOrdered : Boolean,
+
+									  isUnique : Boolean) =
+
+	Tuple{
+
+		lower = m.range->asSequence()->first().lower,
+
+		upper = m.range->asSequence()->first().upper,
+
+		isOrdered = (o = 'ok_ordered'),
+
+		isUnique = isUnique
+
+	};
+
+
+
+helper context UML!StructuralFeature def: getMOFMultiplicity() : 
+
+						TupleType(lower : Integer, upper : Integer,
+
+								  isOrdered : Boolean, isUnique : Boolean) =
+
+	if not self.multiplicity.oclIsUndefined()
+
+	then
+
+		if not self.ordering.oclIsUndefined()
+
+		then
+
+			thisModule.getMultiplicity(self.multiplicity, self.ordering, false)
+
+		else
+
+			thisModule.getMultiplicity(self.multiplicity, 'ok_ordered', false)
+
+		endif
+
+	else
+
+		Tuple{lower = 1, upper = 1, isOrdered = true, isUnique = true}
+
+	endif;
+
+	
+
+	
+
+
+
+
+
+rule Package {
+
+	from
+
+		up : UML!Package (
+
+			up.stereotype->exists(e | e.name = 'metamodel')
+
+		)
+
+	to
+
+		mp : MOF!Package (
+
+			
+			name <- up.name,
+
+			annotation <- '',
+
+			container <- up.namespace,
+
+			constraints <- up.constraint,
+
+			
+			
+
+			
+			contents <- up.ownedElement,
+
+			
+			
+
+			
+			isRoot <- up.isRoot,
+
+			isLeaf <- up.isLeaf,
+
+			isAbstract <- up.isAbstract,
+
+			visibility <- up.getMOFVisibility(),
+
+			supertypes <- up.generalization->collect(e | e.parent)
+
+			
+		)
+
+}
+
+
+
+rule Constraint {
+
+	from
+
+		uc : UML!Constraint
+
+	to
+
+		mc : MOF!Constraint(
+
+			
+			name <- uc.name,
+
+			annotation <- '',
+
+			container <- uc.namespace,
+
+			constraints <- uc.constraint,
+
+			
+
+
+			expression <- uc.body.body,
+
+			language <- uc.body.language,
+
+			constrainedElements <- uc.constrainedElement,
+
+			evaluationPolicy <- #immediate
+
+		)
+
+}
+
+
+
+rule Comment {
+
+	from
+
+		uc : UML!Comment (
+
+			uc.stereotype->exists(e | e.name = 'constraint')
+
+		)
+
+	to
+
+		mc : MOF!Constraint(
+
+			
+			name <- uc.name,
+
+			annotation <- '',
+
+			container <- uc.namespace,
+
+			constraints <- uc.constraint,
+
+			
+
+
+			expression <- uc.body,
+
+			language <- 'OCL',
+
+			constrainedElements <- uc.annotatedElement
+
+		)
+
+}
+
+
+
+rule Class {
+
+	from
+
+		uc : UML!Class (
+
+			uc.namespace.stereotype->exists(e | e.name = 'metamodel')
+
+		)
+
+	to
+
+		mc : MOF!Class (
+
+			
+			name <- uc.name,
+
+			annotation <- '',
+
+			container <- uc.namespace,
+
+			constraints <- uc.constraint,
+
+			
+
+
+			
+			contents <- uc.ownedElement,
+
+			
+			
+
+			
+			isRoot <- uc.isRoot,
+
+			isLeaf <- uc.isLeaf,
+
+			isAbstract <- uc.isAbstract,
+
+			visibility <- uc.getMOFVisibility(),
+
+			supertypes <- uc.generalization->collect(e | e.parent),
+
+			
+
+
+			isSingleton <- false
+
+		)
+
+}
+
+
+
+rule Attribute {
+
+	from
+
+		ua : UML!Attribute
+
+	to
+
+		ma : MOF!Attribute (
+
+			
+			name <- ua.name,
+
+			annotation <- '',
+
+			container <- ua.owner,
+
+			constraints <- ua.constraint,
+
+			
+			
+
+			
+			scope <- ua.getMOFScope(),
+
+			visibility <- ua.getMOFVisibility(),
+
+			
+			
+
+			
+			multiplicity <- ua.getMOFMultiplicity(),
+
+			isChangeable <- ua.getMOFIsChangeable(),
+
+			
+			
+
+			
+			type <- ua.type,
+
+			
+
+
+			isDerived <- false
+
+		)
+
+}
+
+
+
+rule Parameter {
+
+	from
+
+		up : UML!Parameter
+
+	to
+
+		mp : MOF!Parameter (
+
+			
+			name <- up.name,
+
+			annotation <- '',
+
+			container <- up.namespace,
+
+			constraints <- up.constraint,
+
+			
+			
+
+			
+			type <- up.type,
+
+			
+
+
+			direction <-
+
+				if up.kind = #pdk_in
+
+				then
+
+					#in_dir
+
+				else
+
+					if up.kind = #pdk_inout
+
+					then
+
+						#inout_dir
+
+					else
+
+						if up.kind = #pdk_out
+
+						then
+
+							#out_dir
+
+						else
+
+							#return_dir
+
+						endif
+
+					endif
+
+				endif
+
+		)
+
+}
+
+
+
+rule Operation {
+
+	from
+
+		uo : UML!Operation
+
+	to
+
+		mo : MOF!Operation (
+
+			
+			name <- uo.name,
+
+			annotation <- '',
+
+			container <- uo.owner,
+
+			constraints <- uo.constraint,
+
+			
+
+
+			
+			contents <- uo.parameter,
+
+			
+
+
+			
+			scope <- uo.getMOFScope(),
+
+			visibility <- uo.getMOFVisibility(),
+
+			
+
+
+			isQuery <- uo.isQuery,
+
+			exceptions <- Set{}
+
+		)
+
+}
+
+
+
+rule Association {
+
+	from
+
+		ua : UML!Association
+
+	to
+
+		ma : MOF!Association (
+
+			
+			name <- ua.name,
+
+			annotation <- '',
+
+			container <- ua.namespace,
+
+			constraints <- ua.constraint,
+
+			
+			
+
+			
+			contents <- ua.connection,
+
+			
+			
+
+			
+			isRoot <- ua.isRoot,
+
+			isLeaf <- ua.isLeaf,
+
+			isAbstract <- ua.isAbstract,
+
+			visibility <- ua.getMOFVisibility(),
+
+			supertypes <- ua.generalization->collect(e | e.parent)
+
+			
+		)
+
+}
+
+
+
+rule AssociationEnd {
+
+	from
+
+		ua : UML!AssociationEnd
+
+	to
+
+		ma : MOF!AssociationEnd(
+
+			
+			name <- ua.name,
+
+			annotation <- '',
+
+			container <- ua.association,
+
+			constraints <- ua.constraint,
+
+			
+			
+
+			
+			type <- ua.participant,
+
+			
+
+
+			isNavigable <- ua.isNavigable,
+
+			aggregation <-
+
+				if ua.aggregation = #ak_aggregate
+
+				then
+
+					#shared
+
+				else
+
+					if ua.aggregation = #ak_composite
+
+					then
+
+						#composite
+
+					else
+
+						#none
+
+					endif
+
+				endif,
+
+			multiplicity <-
+
+				thisModule.getMultiplicity(ua.multiplicity, ua.ordering, true),
+
+			isChangeable <- ua.getMOFIsChangeable()
+
+		),
+
+		
+
+		mr : distinct MOF!Reference foreach(c in
+
+									if ua.isNavigable
+
+									then
+
+										Sequence{true}
+
+									else
+
+										Sequence{}
+
+									endif) (
+
+			
+			name <- ua.name,
+
+			annotation <- '',
+
+			container <- ua.association.connection
+
+							->select(e | not (e = ua))
+
+							->first().participant,
+
+			constraints <- Sequence{ua.constraint},
+
+			
+
+
+			
+			scope <- #instance_level,
+
+			visibility <- ua.getMOFVisibility(),
+
+			
+
+
+			
+			
+			
+			multiplicity <-
+
+				thisModule.getMultiplicity(ua.multiplicity, ua.ordering, true),
+
+			isChangeable <- ua.getMOFIsChangeable(),
+
+			
+	
+
+			
+			type <- ua.participant,
+
+			
+
+
+			
+			
+			referencedEnd <- ma
+
+		)
+
+}
+
+
+
+rule TaggedValue {
+
+	from
+
+		ut : UML!TaggedValue (
+
+			(ut.type.name <> 'element.uuid') and
+
+			(ut.type.name <> 'isValid')
+
+		)
+
+	using {
+
+		name : String = ut.type.name;
+
+	}
+
+	to
+
+		ot : MOF!Tag (
+
+			
+			name <- ut.name,
+
+			annotation <- '',
+
+			container <- ut.namespace,
+
+			constraints <- ut.constraint,
+
+			
+
+
+			tagId <- name,
+
+			values <- ut.dataValue,
+
+			elements <- Sequence{ut.modelElement}
+
+		)
+
+}
+
+
+
+rule Dependency {
+
+	from
+
+		ud : UML!Dependency (
+
+			ud.stereotype
+
+				->exists(e | e.name = 'import' or e.name = 'clustering')
+
+		)
+
+	using {
+
+		importer : UML!ModelElement = ud.client->asSequence()->first();
+
+		imported : UML!ModelElement = ud.supplier->asSequence()->first();
+
+	}
+
+	to
+
+		mi : MOF!Import (
+
+			
+			name <- imported.name,
+
+			annotation <- '',
+
+			container <- importer,
+
+			constraints <- ud.constraint,
+
+			
+
+
+			visibility <- #public_vis,
+
+			isClustered <-
+
+					if ud.stereotype->exists(e | e.name = 'import')
+
+					then
+
+						false
+
+					else
+
+						true
+
+					endif,
+
+			importedNamespace <- imported
+
+		)
+
+}
+
+
+
+
+
+rule DataType{
+
+	from
+
+		ud : UML!DataType
+
+	to
+
+		md : MOF!PrimitiveType (
+
+			
+			name <- ud.name,
+
+			annotation <- '',
+
+			container <- ud.namespace,
+
+			constraints <- ud.constraint,
+
+			
+
+
+			
+			contents <- ud.ownedElement,
+
+			
+			
+
+			
+			isRoot <- ud.isRoot,
+
+			isLeaf <- ud.isLeaf,
+
+			isAbstract <- ud.isAbstract,
+
+			visibility <- #public_vis,
+
+			supertypes <- ud.generalization->collect(e | e.parent)
+
+			
+		)
+
+}
+

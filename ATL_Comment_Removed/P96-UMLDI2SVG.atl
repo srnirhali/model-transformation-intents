@@ -1,0 +1,3363 @@
+module UMLDI2SVG;
+
+create OUT: SVG from IN: UMLDI;
+
+
+
+
+
+	
+		
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphElement def: isOfKind(kind: String): Boolean =
+
+	if self.semanticModel.oclIsKindOf(UMLDI!Uml1SemanticModelBridge) then
+
+		self.semanticModel.element.oclIsKindOf(kind)
+
+	else
+
+		false
+
+	endif;
+
+
+
+		
+		
+			
+			
+			
+helper context UMLDI!GraphNode def: isOfType(testType: String): Boolean =
+
+	if self.semanticModel.oclIsKindOf(UMLDI!SimpleSemanticModelElement) then
+
+		self.semanticModel.typeInfo = testType
+
+	else
+
+		false
+
+	endif;
+
+		
+
+		
+		
+			
+			
+			
+			
+helper context UMLDI!GraphNode def: hasAttributes(): Boolean =
+
+	if self.contained->exists( e | e.isOfType('AttributeCompartment')) then
+
+		self.contained->select( e | e.isOfType('AttributeCompartment'))->
+
+			first().contained->exists( e | e.isOfType('DelimitedSection'))
+
+	else
+
+		false
+
+	endif;
+
+	
+
+		
+		
+			
+			
+			
+			
+helper context UMLDI!GraphNode def: hasMethods(): Boolean =
+
+	if self.contained->exists( e | e.isOfType('OperationCompartment')) then
+
+		self.contained->select( e | e.isOfType('OperationCompartment'))->
+
+			first().contained->exists( e | e.isOfType('DelimitedSection'))
+
+	else
+
+		false
+
+	endif;
+
+
+
+		
+		
+		
+			
+			
+			
+			
+helper context UMLDI!GraphNode def: hasAttSeparator(): Boolean =
+
+	self.contained->select( e | e.isOfType('CompartmentSeparator'))->size() = 2;
+
+
+
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: isNamed(): Boolean =
+
+	not self.semanticModel.element.name.oclIsUndefined();
+
+
+
+helper context UMLDI!GraphEdge def: isStereotypeNamed(): Boolean =
+
+	not self.contained->select( e |
+
+		e .isOfType('StereotypeCompartment'))->
+
+			first().contained->select( e |
+
+				e.isOfKind(UMLDI!Stereotype))->
+
+				first().semanticModel.element.name.oclIsUndefined();
+
+
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: hasLeftRole(): Boolean =
+
+	not self.semanticModel.element.connection->
+
+		first().name.oclIsUndefined();
+
+
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: hasRightRole(): Boolean =
+
+	not self.semanticModel.element.connection->
+
+		last().name.oclIsUndefined();
+
+
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: hasLeftMultiplicity(): Boolean =
+
+	self.semanticModel.element.connection->first().multiplicity.range->
+
+		asSequence()->first().lower <> 1 or
+
+	self.semanticModel.element.connection->first().multiplicity.range->
+
+		asSequence()->last().upper <> 1;
+
+
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: hasRightMultiplicity(): Boolean =
+
+	self.semanticModel.element.connection->last().multiplicity.range->
+
+		asSequence()->first().lower <> 1 or
+
+	self.semanticModel.element.connection->last().multiplicity.range->
+
+		asSequence()->last().upper <> 1;
+
+
+
+		
+		
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: hasMarkerStart(): Boolean =
+
+	(self.semanticModel.element.connection->first().isNavigable and
+
+	not(self.semanticModel.element.connection->last().isNavigable))
+
+	or self.semanticModel.element <> 'none';
+
+
+
+		
+		
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: hasMarkerEnd(): Boolean =
+
+	(not(self.semanticModel.element.connection->first().isNavigable) and
+
+	self.semanticModel.element.connection->last().isNavigable)
+
+	or self.semanticModel.element <> 'none';
+
+
+
+	
+
+
+	
+	
+
+		
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphElement def: getAbsoluteNoOffsetX(): Real =
+
+	if not self.oclIsKindOf(UMLDI!Diagram) then
+
+		self.position.x + self.container.getAbsoluteNoOffsetX()
+
+	else
+
+		self.position.x
+
+	endif;
+
+
+
+		
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphElement def: getAbsoluteNoOffsetY(): Real =
+
+	if not self.oclIsKindOf(UMLDI!Diagram) then
+
+		self.position.y + self.container.getAbsoluteNoOffsetY()
+
+	else
+
+		self.position.y
+
+	endif;
+
+
+
+		
+		
+		
+		
+		
+		
+		
+			
+			
+			
+			
+			
+helper def: offset: TupleType (minX: Real, minY: Real) =
+
+	let leaves: Sequence(UMLDI!GraphElement) = 
+
+		UMLDI!GraphElement.allInstances()->select( e | e.contained->
+
+			isEmpty()) in
+
+	let setMinX: Set (Real) = leaves->iterate( e; acc: Set (Real) =
+
+		Set {} |
+
+		acc->including(e.getAbsoluteNoOffsetX())) in
+
+	let setMinY: Set (Real) = leaves->iterate( e; acc: Set (Real) =
+
+		Set {} |
+
+		acc->including(e.getAbsoluteNoOffsetY())) in
+
+	let viewOffset: Real = 20.0 in
+
+	Tuple { x = setMinX->iterate(e; acc: Real = 0 |
+
+		if e < acc then e else acc endif) - viewOffset,
+
+		y = setMinY->iterate(e; acc: Real = 0 |
+
+		if e < acc then e else acc endif) - viewOffset };
+
+
+
+		
+		
+			
+			
+			
+			
+			
+helper context UMLDI!GraphElement def: getAbsoluteX(): Real =
+
+	self.getAbsoluteNoOffsetX() - thisModule.offset.x;
+
+
+
+		
+		
+			
+			
+			
+			
+			
+helper context UMLDI!GraphElement def: getAbsoluteY(): Real =
+
+	self.getAbsoluteNoOffsetY() - thisModule.offset.y;
+
+
+
+	
+	
+
+	
+	
+		
+		
+		
+helper def: diagram: UMLDI!Diagram =
+
+	UMLDI!Diagram.allInstances()->asSequence()->first();
+
+	
+
+	
+	
+
+		
+		
+		
+			
+			
+			
+			
+helper context UMLDI!GraphNode def: mult(): String =
+
+	if self.semanticModel.element.multiplicity.oclIsUndefined() then
+
+		''
+
+	else
+
+		self.semanticModel.element.multiplicity.getMultiplicity()
+
+	endif;
+
+
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!Multiplicity def: getMultiplicity(): String =
+
+	let lower: String = self.range->asSequence()->first().lower in
+
+	let upper: String = self.range->asSequence()->last().upper in
+
+	if lower = 0 and upper = 0-1 then
+
+		'*'
+
+	else
+
+		if lower = 0 then
+
+			lower.toString() + '..' + upper.toString()
+
+		else
+
+			if upper = 0-1 then
+
+				lower.toString() + '..' + '*'
+
+			else
+
+				lower.toString() + '..' + upper.toString()
+
+			endif
+
+		endif
+
+	endif;
+
+
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphNode def: getInitialValue(): String =
+
+	let elt: UMLDI!Attribute = self.semanticModel.element in
+
+	if not elt.initialValue.oclIsUndefined() then
+
+		if elt.initialValue <> '' then
+
+			'= ' + elt.initialValue.body
+
+		else
+
+			''
+
+		endif
+
+	else
+
+		''
+
+	endif;
+
+
+
+		
+		
+			
+			
+			
+helper context UMLDI!GraphNode def: getVisibility(): String =
+
+	let visibility: String = self.semanticModel.element.visibility in
+
+	if visibility = #vk_public then
+
+		'+'
+
+	else
+
+		if visibility = #vk_package then
+
+			'~'
+
+		else if visibility = #vk_private then
+
+				'-'
+
+			else
+
+				'#'
+
+			endif
+
+		endif
+
+	endif;
+
+
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphNode def: getParameters(): String =
+
+	let element: UMLDI!Operation = self.semanticModel.element in
+
+	let end: Integer = element.parameter->size() in
+
+	if end <> 1 then
+
+		element.parameter->iterate( e; acc: String = '' |
+
+			if e.kind <> #pdk_return then
+
+				if e.name = element.parameter->last().name then
+
+					acc + e.name + ':' + e.type.name
+
+				else
+
+					acc + e.name + ':' + e.type.name + ','
+
+				endif
+
+			else
+
+				''
+
+			endif)
+
+	else
+
+		''
+
+	endif;
+
+
+
+		
+		
+			
+			
+			
+helper context UMLDI!GraphNode def: getReturnParameter(): String =
+
+	self.semanticModel.element.parameter->
+
+		select( p | p.kind = #pdk_return)->first().type.name;
+
+
+
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: getName(): String =
+
+	if self.isNamed() then
+
+		self.semanticModel.element.name
+
+	else
+
+		''
+
+	endif;
+
+
+
+		
+		
+		
+			
+			
+			
+helper context UMLDI!GraphEdge def: getMarker(position: String): String =
+
+	let element: UMLDI!Association = 
+
+		self.semanticModel.element in
+
+	let connection1: UMLDI!AssociationEnd = 
+
+		element.connection->first() in
+
+	let connection2: UMLDI!AssociationEnd = 
+
+		element.connection->last() in
+
+	if position = 'start' then
+
+		if self.hasMarkerStart() then
+
+			if connection1.isNavigable and
+
+				not connection2.isNavigable then
+
+				'url(#Association)'
+
+			else
+
+				if connection1.aggregation = #ak_composite then
+
+					'url(#Composition)'
+
+				else
+
+					if connection1.aggregation = #ak_none then
+
+						'none'
+
+					else
+
+						'url(#Aggregation)'
+
+					endif
+
+				endif
+
+			endif
+
+		else
+
+			'none'
+
+		endif
+
+	else
+
+		if self.hasMarkerEnd() then
+
+			if not(connection1.isNavigable) and
+
+				connection2.isNavigable then
+
+				'url(#Association)'
+
+			else
+
+				if connection2.aggregation = #ak_composite then
+
+					'url(#Composition)'
+
+				else
+
+					if connection2.aggregation = #ak_none then
+
+						'none'
+
+					else
+
+						'url(#Aggregation)'
+
+					endif
+
+				endif
+
+			endif
+
+		else
+
+			'none'
+
+		endif
+
+	endif;
+
+
+
+
+
+	
+	
+	
+	
+	
+rule Diagram2SVG {
+
+	from
+
+		d: UMLDI!Diagram
+
+	to
+
+		out: SVG!Svg (
+
+			namespace <- 'http://www.w3.org/2000/svg',
+
+			version <- '1.0',
+
+			position <- abs,
+
+			size <- dim,
+
+			children <- Sequence {definitions}
+
+			),
+
+			abs: SVG!AbsoluteCoord (
+
+				x <- d.getAbsoluteX(),
+
+				y <- d.getAbsoluteY()
+
+			),
+
+			dim: SVG!Dimension (
+
+				width <- d.size.width,
+
+				height <- d.size.height
+
+			),
+
+			definitions: SVG!Defs (
+
+				groupContent <- 
+
+					Sequence {Association, Generalization, Dependency,
+
+						Aggregation, Composition}
+
+			),
+
+				Association: SVG!Marker (
+
+					identifier <- 'Association',
+
+					refX <- 10.0,
+
+					refY <- 5.0,
+
+					markerWidth <- 11.0,
+
+					markerHeight <- 11.0,
+
+					orient <- 'auto',
+
+					fill <- 'none',
+
+					viewBox <- '0 0 10 10',
+
+					drawing <- associationPathGroup
+
+				),
+
+					associationPathGroup: SVG!G (
+
+						groupContent <- associationPath	
+
+					),
+
+						associationPath: SVG!Path (
+
+							stroke <- 'black',
+
+							d <- 'M 0 0 L 10 5 L 0 10'
+
+						),
+
+				Generalization: SVG!Marker (
+
+					identifier <- 'Generalization',
+
+					refX <- 10.0,
+
+					refY <- 5.0,
+
+					markerWidth <- 11.0,
+
+					markerHeight <- 11.0,
+
+					orient <- 'auto',
+
+					fill <- 'white',
+
+					viewBox <- '0 0 10 10',
+
+					drawing <- generalizationPathGroup
+
+				),
+
+					generalizationPathGroup: SVG!G (
+
+						groupContent <- 
+
+							Sequence {generalizationPath1, generalizationPath2}
+
+					),
+
+						generalizationPath1: SVG!Path (
+
+							stroke <- 'black',
+
+							d <- 'M 0 0 L 10 5 L 0 10'
+
+						),
+
+						generalizationPath2: SVG!Path (
+
+							stroke <- 'black',
+
+							d <- 'M 0.05 0.2 L 0.2 9.95'
+
+						),
+
+				Dependency: SVG!Marker (
+
+					identifier <- 'Dependency',
+
+					refX <- 10.0,
+
+					refY <- 5.0,
+
+					markerWidth <- 11.0,
+
+					markerHeight <- 11.0,
+
+					orient <- 'auto',
+
+					fill <- 'none',
+
+					viewBox <- '0 0 10 10',
+
+					drawing <- dependencyPathGroup
+
+				),
+
+					dependencyPathGroup: SVG!G (
+
+						groupContent <- dependencyPath	
+
+					),
+
+						dependencyPath: SVG!Path (
+
+							stroke <- 'black',
+
+							d <- 'M 0 0 L 10 5 L 0 10'
+
+						),
+
+				Aggregation: SVG!Marker (
+
+					identifier <- 'Aggregation',
+
+					refX <- 10.0,
+
+					refY <- 5.0,
+
+					markerWidth <- 11.0,
+
+					markerHeight <- 11.0,
+
+					orient <- '180',
+
+					fill <- 'white',
+
+					viewBox <- '0 0 10 10',
+
+					drawing <- aggregationPathGroup
+
+				),
+
+					aggregationPathGroup: SVG!G (
+
+						groupContent <- aggregationPath	
+
+					),
+
+						aggregationPath: SVG!Path (
+
+							stroke <- 'black',
+
+							d <- 'M 0 5 L 5 10 L 10 5 L 5 0 L 0 5'
+
+						),
+
+				Composition: SVG!Marker (
+
+					identifier <- 'Composition',
+
+					refX <- 10.0,
+
+					refY <- 5.0,
+
+					markerWidth <- 11.0,
+
+					markerHeight <- 11.0,
+
+					orient <- '180',
+
+					fill <- 'black',
+
+					viewBox <- '0 0 10 10',
+
+					drawing <- compositionPathGroup
+
+				),
+
+					compositionPathGroup: SVG!G (
+
+						groupContent <- compositionPath	
+
+					),
+
+						compositionPath: SVG!Path (
+
+							stroke <- 'black',
+
+							d <- 'M 0 5 L 5 10 L 10 5 L 5 0 L 0 5'
+
+						)
+
+}
+
+
+
+	
+	
+	
+	
+	
+	
+	
+	
+
+		
+		
+rule FullClassBox {
+
+	from 
+
+		n: UMLDI!GraphNode (
+
+			if n.isOfKind(UMLDI!Class) or n.isOfKind(UMLDI!Interface) then
+
+				n.hasAttributes() and n.hasMethods() and n.hasAttSeparator()
+
+			else
+
+				false
+
+			endif
+
+		)
+
+	to
+
+		
+		out: SVG!G (
+
+			name <- 'Class_' + n.semanticModel.element.name,
+
+			groupContent <- 
+
+				Sequence {rect, nameSep, name, attlist, attSep,
+
+					methodlist},
+
+			root <- thisModule.diagram
+
+		),
+
+		
+
+		
+		
+		rect: SVG!Rect (
+
+			fill <- 'white',
+
+			stroke <- 'black',
+
+			position <- rectpos,
+
+			size <- rectdim
+
+		),
+
+		rectpos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.getAbsoluteY()
+
+		),
+
+		rectdim: SVG!Dimension (
+
+			width <- n.size.width,
+
+			height <- n.size.height
+
+		),
+
+		
+
+		
+		
+		nameSep: SVG!Line (
+
+			between <- Sequence {origin1, end1},
+
+			stroke <- 'black'
+
+		),
+
+		origin1: SVG!Point (
+
+			position <- origin1Pos
+
+		),
+
+		origin1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height + n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		end1: SVG!Point (
+
+			position <- end1Pos
+
+		),
+
+		end1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		
+
+		
+		name: SVG!Text (
+
+			content <- n.semanticModel.element.name,
+
+			position <- textPos,
+
+			attribute <- Sequence {fontWeight, fontStyle},
+
+			fill <- 'black',
+
+			fontSize <- '11px'
+
+		),
+
+		textPos: SVG!AbsoluteCoord (
+
+			x <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteY() + 
+
+				n.contained->select( e |
+
+					e.semanticModel.typeInfo = 'NameCompartment')->
+
+					first().size.height/2
+
+		),
+
+		fontWeight: SVG!FontWeight (
+
+			bold <- true	
+
+		),
+
+		fontStyle: SVG!FontStyle (
+
+			italic <- n.semanticModel.element.isAbstract	
+
+		),
+
+		
+
+		
+		
+		attlist: SVG!G (
+
+			name <- 'Attributes of Class_' + n.semanticModel.element.name,
+
+			groupContent <- n.contained->select( e |
+
+				e.isOfType('AttributeCompartment'))->first().contained->
+
+				select( e | e.isOfType('DelimitedSection'))->first().contained
+
+		),
+
+		
+
+		
+		
+		attSep: SVG!Line (
+
+			between <- Sequence {origin2, end2},
+
+			stroke <- 'black'
+
+		),
+
+		origin2: SVG!Point (
+
+			position <- origin2Pos
+
+		),
+
+		origin2Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				last().size.height + n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('AttributeCompartment'))->
+
+					first().size.height
+
+		),
+
+		end2: SVG!Point (
+
+			position <- end2Pos
+
+		),
+
+		end2Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				last().size.height + n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('AttributeCompartment'))->
+
+					first().size.height
+
+		),
+
+		
+
+		
+		
+		methodlist: SVG!G (
+
+			name <- 'Operations of Class_' + n.semanticModel.element.name,
+
+			groupContent <- n.contained->select( e |
+
+				e.isOfType('OperationCompartment'))->first().contained->
+
+				select( e | e.isOfType('DelimitedSection'))->first().contained
+
+		)		
+
+}
+
+
+
+		
+		
+		
+rule EmptyClassBoxNoSeparator {
+
+	from
+
+		n: UMLDI!GraphNode (
+
+			if n.isOfKind(UMLDI!Class) or n.isOfKind(UMLDI!Interface) then
+
+				not(n.hasAttributes()) and not(n.hasMethods()) 
+
+				and not(n.hasAttSeparator())
+
+			else
+
+				false
+
+			endif
+
+		)
+
+	to
+
+		
+		out: SVG!G (
+
+			name <- 'Class_' + n.semanticModel.element.name,
+
+			groupContent <- Sequence {rect, nameSep, name},
+
+			root <- thisModule.diagram
+
+		),
+
+		
+
+		
+		
+		rect: SVG!Rect (
+
+			fill <- 'white',
+
+			stroke <- 'black',
+
+			position <- rectpos,
+
+			size <- rectdim
+
+		),
+
+		rectpos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.getAbsoluteY()
+
+		),
+
+		rectdim: SVG!Dimension (
+
+			width <- n.size.width,
+
+			height <- n.size.height
+
+		),
+
+			
+
+		
+		
+		nameSep: SVG!Line (
+
+			between <- Sequence {origin1, end1},
+
+			stroke <- 'black'
+
+		),
+
+		origin1: SVG!Point (
+
+			position <- origin1Pos
+
+		),
+
+		origin1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		end1: SVG!Point (
+
+			position <- end1Pos
+
+		),
+
+		end1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		
+
+		
+		name: SVG!Text (
+
+			content <- n.semanticModel.element.name,
+
+			position <- textPos,
+
+			attribute <- Sequence {fontWeight},
+
+			fill <- 'black',
+
+			fontSize <- '11px'
+
+		),
+
+		textPos: SVG!AbsoluteCoord (
+
+			x <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.semanticModel.typeInfo = 'NameCompartment')->
+
+					first().size.height/2
+
+		),
+
+		fontWeight: SVG!FontWeight (
+
+			bold <- true	
+
+		)
+
+}
+
+		
+
+		
+		
+		
+rule EmptyClassBoxWithSeparator {
+
+	from 
+
+		n: UMLDI!GraphNode (
+
+			if n.isOfKind(UMLDI!Class) or n.isOfKind(UMLDI!Interface) then 
+
+				not(n.hasAttributes()) and not(n.hasMethods())
+
+				and n.hasAttSeparator()
+
+			else
+
+				false
+
+			endif
+
+		)
+
+	to
+
+		
+		out: SVG!G (
+
+			name <- 'Class_' + n.semanticModel.element.name,
+
+			groupContent <- Sequence {rect, nameSep, name, attSep},
+
+			root <- thisModule.diagram
+
+		),
+
+		
+
+		
+		
+		rect: SVG!Rect (
+
+			fill <- 'white',
+
+			stroke <- 'black',
+
+			position <- rectpos,
+
+			size <- rectdim
+
+		),
+
+		rectpos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.getAbsoluteY()
+
+		),
+
+		rectdim: SVG!Dimension (
+
+			width <- n.size.width,
+
+			height <- n.size.height
+
+		),
+
+		
+
+		
+		
+		nameSep: SVG!Line (
+
+			between <- Sequence {origin1, end1},
+
+			stroke <- 'black'
+
+		),
+
+		origin1: SVG!Point (
+
+			position <- origin1Pos
+
+		),
+
+		origin1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		end1: SVG!Point (
+
+			position <- end1Pos
+
+		),
+
+		end1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+				
+
+		
+		name: SVG!Text (
+
+			content <- n.semanticModel.element.name,
+
+			position <- textPos,
+
+			attribute <- Sequence {fontWeight},
+
+			fill <- 'black',
+
+			fontSize <- '11px'
+
+		),
+
+		textPos: SVG!AbsoluteCoord (
+
+			x <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.semanticModel.typeInfo = 'NameCompartment')->
+
+					first().size.height/2
+
+		),
+
+		fontWeight: SVG!FontWeight (
+
+			bold <- true	
+
+		),
+
+			
+
+		
+		
+		attSep: SVG!Line (
+
+			between <- Sequence {origin2, end2},
+
+			stroke <- 'black'
+
+		),
+
+		origin2: SVG!Point (
+
+			position <- origin2Pos
+
+		),
+
+		origin2Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				last().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('AttributeCompartment'))->
+
+					first().size.height
+
+		),
+
+		end2: SVG!Point (
+
+			position <- end2Pos
+
+		),
+
+		end2Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				last().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('AttributeCompartment'))->
+
+					first().size.height
+
+		)
+
+}
+
+
+
+		
+		
+		
+rule AttributeOnlyClassBoxWithSeparator {
+
+	from 
+
+		n: UMLDI!GraphNode (
+
+			if n.isOfKind(UMLDI!Class) or n.isOfKind(UMLDI!Interface) then
+
+				n.hasAttributes() and not(n.hasMethods()) and 
+
+				n.hasAttSeparator()
+
+			else
+
+				false
+
+			endif
+
+		)
+
+	to
+
+		
+		out: SVG!G (
+
+			name <- 'Class_' + n.semanticModel.element.name,
+
+			groupContent <- Sequence {rect, nameSep, name, attlist, attSep},
+
+			root <- thisModule.diagram
+
+		),
+
+		
+
+		
+		
+		rect: SVG!Rect (
+
+			fill <- 'white',
+
+			stroke <- 'black',
+
+			position <- rectpos,
+
+			size <- rectdim
+
+		),
+
+		rectpos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.getAbsoluteY()
+
+		),
+
+		rectdim: SVG!Dimension (
+
+			width <- n.size.width,
+
+			height <- n.size.height
+
+		),
+
+		
+
+		
+		
+		nameSep: SVG!Line (
+
+			between <- Sequence {origin1, end1},
+
+			stroke <- 'black'
+
+		),
+
+		origin1: SVG!Point (
+
+			position <- origin1Pos
+
+		),
+
+		origin1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e | 
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		end1: SVG!Point (
+
+			position <- end1Pos
+
+		),
+
+		end1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+				
+
+		
+		name: SVG!Text (
+
+			content <- n.semanticModel.element.name,
+
+			position <- textPos,
+
+			attribute <- Sequence {fontWeight},
+
+			fill <- 'black',
+
+			fontSize <- '11px'
+
+		),
+
+		textPos: SVG!AbsoluteCoord (
+
+			x <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.semanticModel.typeInfo = 'NameCompartment')->
+
+					first().size.height/2
+
+		),
+
+		fontWeight: SVG!FontWeight (
+
+			bold <- true	
+
+		),
+
+			
+
+		
+		
+		attlist: SVG!G (
+
+			name <- 'Attributes of Class_' + n.semanticModel.element.name,
+
+			groupContent <- n.contained->select( e |
+
+				e.isOfType('AttributeCompartment'))->
+
+				first().contained->select( e |
+
+					e.isOfType('DelimitedSection'))->first().contained
+
+		),
+
+		
+
+		
+		
+		attSep: SVG!Line (
+
+			between <- Sequence {origin2, end2},
+
+			stroke <- 'black'
+
+		),
+
+		origin2: SVG!Point (
+
+			position <- origin2Pos
+
+		),
+
+		origin2Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				last().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('AttributeCompartment'))->
+
+					first().size.height
+
+		),
+
+		end2: SVG!Point (
+
+			position <- end2Pos
+
+		),
+
+		end2Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				last().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('AttributeCompartment'))->
+
+					first().size.height
+
+		)	
+
+}
+
+
+
+		
+		
+		
+rule AttributeOnlyClassBoxNoSeparator {
+
+	from 
+
+		n: UMLDI!GraphNode (
+
+			if n.isOfKind(UMLDI!Class) or n.isOfKind(UMLDI!Interface) then
+
+				n.hasAttributes() and not(n.hasMethods()) and 
+
+				not(n.hasAttSeparator())
+
+			else
+
+				false
+
+			endif
+
+		)
+
+	to
+
+		
+		out: SVG!G (
+
+			name <- 'Class_' + n.semanticModel.element.name,
+
+			groupContent <- Sequence {rect, nameSep, name, attlist},
+
+			root <- thisModule.diagram
+
+		),
+
+		
+
+		
+		
+		rect: SVG!Rect (
+
+			fill <- 'white',
+
+			stroke <- 'black',
+
+			position <- rectpos,
+
+			size <- rectdim
+
+		),
+
+		rectpos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.getAbsoluteY()
+
+		),
+
+		rectdim: SVG!Dimension (
+
+			width <- n.size.width,
+
+			height <- n.size.height
+
+		),
+
+		
+
+		
+		
+		nameSep: SVG!Line (
+
+			between <- Sequence {origin1, end1},
+
+			stroke <- 'black'
+
+		),
+
+		origin1: SVG!Point (
+
+			position <- origin1Pos
+
+		),
+
+		origin1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		end1: SVG!Point (
+
+			position <- end1Pos
+
+		),
+
+		end1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+				
+
+		
+		name: SVG!Text (
+
+			content <- n.semanticModel.element.name,
+
+			position <- textPos,
+
+			attribute <- Sequence {fontWeight},
+
+			fill <- 'black',
+
+			fontSize <- '11px'
+
+		),
+
+		textPos: SVG!AbsoluteCoord (
+
+			x <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.semanticModel.typeInfo = 'NameCompartment')->
+
+					first().size.height/2
+
+		),
+
+		fontWeight: SVG!FontWeight (
+
+			bold <- true	
+
+		),
+
+			
+
+		
+		
+		attlist: SVG!G (
+
+			name <- 'Attributes of Class_' + n.semanticModel.element.name,
+
+			groupContent <- n.contained->select( e |
+
+				e.isOfType('AttributeCompartment'))->
+
+				first().contained->select( e |
+
+					e.isOfType('DelimitedSection'))->first().contained
+
+		)
+
+}
+
+
+
+		
+		
+		
+rule MethodOnlyClassBoxWithSeparator {
+
+	from 
+
+		n: UMLDI!GraphNode (
+
+			if n.isOfKind(UMLDI!Class) or n.isOfKind(UMLDI!Interface) then
+
+				not(n.hasAttributes()) and n.hasMethods()
+
+				and n.hasAttSeparator()
+
+			else
+
+				false
+
+			endif
+
+		)
+
+	to
+
+		
+		out: SVG!G (
+
+			name <- 'Class_' + n.semanticModel.element.name,
+
+			groupContent <- Sequence {rect, nameSep, name, attSep, methodlist},
+
+			root <- thisModule.diagram
+
+		),
+
+		
+
+		
+		
+		rect: SVG!Rect (
+
+			fill <- 'white',
+
+			stroke <- 'black',
+
+			position <- rectpos,
+
+			size <- rectdim
+
+		),
+
+		rectpos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.getAbsoluteY()
+
+		),
+
+		rectdim: SVG!Dimension (
+
+			width <- n.size.width,
+
+			height <- n.size.height
+
+		),
+
+		
+
+		
+		
+		nameSep: SVG!Line (
+
+			between <- Sequence {origin1, end1},
+
+			stroke <- 'black'
+
+		),
+
+		origin1: SVG!Point (
+
+			position <- origin1Pos
+
+		),
+
+		origin1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		end1: SVG!Point (
+
+			position <- end1Pos
+
+		),
+
+		end1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+				
+
+		
+		name: SVG!Text (
+
+			content <- n.semanticModel.element.name,
+
+			position <- textPos,
+
+			attribute <- Sequence {fontWeight},
+
+			fill <- 'black',
+
+			fontSize <- '11px'
+
+		),
+
+		textPos: SVG!AbsoluteCoord (
+
+			x <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.semanticModel.typeInfo = 'NameCompartment')->
+
+					first().size.height/2
+
+		),
+
+		fontWeight: SVG!FontWeight (
+
+			bold <- true	
+
+		),
+
+			
+
+		
+		
+		attSep: SVG!Line (
+
+			between <- Sequence {origin2, end2},
+
+			stroke <- 'black'
+
+		),
+
+		origin2: SVG!Point (
+
+			position <- origin2Pos
+
+		),
+
+		origin2Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				last().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('AttributeCompartment'))->
+
+					first().size.height
+
+		),
+
+		end2: SVG!Point (
+
+			position <- end2Pos
+
+		),
+
+		end2Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				last().size.height + n.getAbsoluteY()
+
+		),
+
+				
+
+		
+		
+		methodlist: SVG!G (
+
+			name <- 'Operations of Class_' + n.semanticModel.element.name,
+
+			groupContent <- n.contained->select( e |
+
+				e.isOfType('OperationCompartment'))->
+
+				first().contained->select( e |
+
+					e.isOfType('DelimitedSection'))->first().contained
+
+		)
+
+}
+
+
+
+		
+		
+		
+rule MethodOnlyClassBoxNoSeparator {
+
+	from 
+
+		n: UMLDI!GraphNode (
+
+			if n.isOfKind(UMLDI!Class) or n.isOfKind(UMLDI!Interface) then
+
+				not(n.hasAttributes()) and n.hasMethods() and
+
+				not(n.hasAttSeparator())
+
+			else
+
+				false
+
+			endif
+
+		)
+
+	to
+
+		
+		out: SVG!G (
+
+			name <- 'Class_' + n.semanticModel.element.name,
+
+			groupContent <- Sequence {rect, nameSep, name, methodlist},
+
+			root <- thisModule.diagram
+
+		),
+
+		
+
+		
+		
+		rect: SVG!Rect (
+
+			fill <- 'white',
+
+			stroke <- 'black',
+
+			position <- rectpos,
+
+			size <- rectdim
+
+		),
+
+		rectpos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.getAbsoluteY()
+
+		),
+
+		rectdim: SVG!Dimension (
+
+			width <- n.size.width,
+
+			height <- n.size.height
+
+		),
+
+			
+
+		
+		
+		nameSep: SVG!Line (
+
+			between <- Sequence {origin1, end1},
+
+			stroke <- 'black'
+
+		),
+
+		origin1: SVG!Point (
+
+			position <- origin1Pos
+
+		),
+
+		origin1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+		end1: SVG!Point (
+
+			position <- end1Pos
+
+		),
+
+		end1Pos: SVG!AbsoluteCoord (
+
+			x <- n.getAbsoluteX() + n.size.width,
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'CompartmentSeparator')->
+
+				first().size.height +
+
+				n.getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.isOfType('NameCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().size.height
+
+		),
+
+				
+
+		
+		name: SVG!Text (
+
+			content <- n.semanticModel.element.name,
+
+			position <- textPos,
+
+			attribute <- Sequence {fontWeight},
+
+			fill <- 'black',
+
+			fontSize <- '11px'
+
+		),
+
+		textPos: SVG!AbsoluteCoord (
+
+			x <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteX(),
+
+			y <- n.contained->select( e |
+
+				e.semanticModel.typeInfo = 'NameCompartment')->
+
+				first().contained->first().getAbsoluteY() +
+
+				n.contained->select( e |
+
+					e.semanticModel.typeInfo = 'NameCompartment')->
+
+					first().size.height/2
+
+		),
+
+		fontWeight: SVG!FontWeight (
+
+			bold <- true	
+
+		),
+
+			
+
+		
+		
+		methodlist: SVG!G (
+
+			name <- 'Operations of Class_' + n.semanticModel.element.name,
+
+			groupContent <- n.contained->select( e |
+
+				e.isOfType('OperationCompartment'))->
+
+				first().contained->select( e |
+
+					e.isOfType('DelimitedSection'))->first().contained
+
+		)
+
+}		
+
+
+
+	
+	
+
+	
+	
+
+		
+		
+		
+		
+		
+		
+		
+rule Attributes {
+
+	from
+
+		a: UMLDI!GraphNode (
+
+			a.isOfKind(UMLDI!Attribute)
+
+		)
+
+	to
+
+		out: SVG!Text (
+
+			content <- a.getVisibility() +
+
+				a.semanticModel.element.name + ':' +
+
+				a.semanticModel.element.type.name +
+
+				a.mult() +
+
+				a.getInitialValue(),
+
+			fill <- 'black',
+
+			position <- atPos,
+
+			fontSize <- '11px'
+
+		),
+
+		atPos: SVG!AbsoluteCoord (
+
+			x <- a.getAbsoluteX(),
+
+			y <- a.getAbsoluteY() + a.contained->select( e |
+
+				e.isOfType('Name'))->first().size.height/2
+
+		)
+
+}
+
+	
+
+		
+		
+		
+		
+		
+		
+rule Methods {
+
+	from
+
+		m: UMLDI!GraphNode (
+
+			m.isOfKind(UMLDI!Operation)
+
+		)
+
+	to
+
+		out: SVG!Text (
+
+			content <- m.getVisibility() +
+
+				m.semanticModel.element.name +
+
+				'(' + m.getParameters() + ')' + ':' +
+
+				m.getReturnParameter(),
+
+			fill <- 'black',
+
+			position <- OpPos,
+
+			fontSize <- '11px',
+
+			attribute <- Sequence {fontStyle}
+
+		),
+
+		OpPos: SVG!AbsoluteCoord (
+
+			x <- m.getAbsoluteX(),
+
+			y <- m.getAbsoluteY() + m.contained->select( e |
+
+				e.isOfType('Name'))->first().size.height/2
+
+		),
+
+		fontStyle: SVG!FontStyle (
+
+			italic <- m.semanticModel.element.isAbstract	
+
+		)
+
+}
+
+
+
+	
+
+
+	
+	
+
+		
+		
+rule GraphEdge2Association {
+
+	from
+
+		ge: UMLDI!GraphEdge (
+
+			ge.isOfKind(UMLDI!Association)
+
+		)
+
+	to
+
+		
+		
+		
+		
+		
+		out: SVG!G (
+
+			name <- ge.semanticModel.element.name,
+
+			groupContent <- Sequence {polyline, name, leftMultiplicity,
+
+				rightMultiplicity, leftRole, rightRole},
+
+			root <- thisModule.diagram
+
+		),
+
+		
+
+		
+		polyline: SVG!Polyline (
+
+			waypoints <- Sequence {wps}->flatten(),
+
+			stroke <- 'black',
+
+			fill <- 'white',
+
+			markerEnd <- ge.getMarker('end'),
+
+			markerStart <- ge.getMarker('start')
+
+		),
+
+		wps: distinct SVG!Point foreach (Point in ge.waypoints) (
+
+			position <- PPos
+
+		),
+
+		PPos: distinct SVG!AbsoluteCoord foreach(Point in ge.waypoints) (
+
+			x <- Point.base.x - thisModule.offset.x,
+
+			y <- Point.base.y - thisModule.offset.y
+
+		),
+
+		
+
+		
+		name: SVG!Text (
+
+			content <- ge.getName(),
+
+			fill <- 'black',
+
+			position <- namePos,
+
+			fontSize <- '10px'
+
+		),
+
+		namePos: SVG!AbsoluteCoord (
+
+			x <- if ge.isNamed() then
+
+					ge.contained->select( e |
+
+					e.isOfType('DirectedName'))->first().getAbsoluteX()
+
+				else 0.0 endif,
+
+			y <- if ge.isNamed() then
+
+					ge.contained->select( e |
+
+					e.isOfType('DirectedName'))->first().getAbsoluteY()
+
+				else 0.0 endif
+
+		),
+
+		
+
+		
+		leftMultiplicity: SVG!Text (
+
+			content <- if ge.hasLeftMultiplicity() then
+
+					ge.semanticModel.element.connection->
+
+					first().multiplicity.getMultiplicity()
+
+				else '' endif,
+
+			fill <- 'black',
+
+			position <- leftMultPos,
+
+			fontSize <- '10px'
+
+		),
+
+		leftMultPos: SVG!AbsoluteCoord (
+
+				x <- if ge.hasLeftMultiplicity() then
+
+					ge.contained->select( e |
+
+						e.isOfKind(UMLDI!AssociationEnd))->
+
+						first().contained->select( e |
+
+							e.isOfType('Multiplicity'))->first().getAbsoluteX()
+
+					else 0.0 endif,
+
+				y <- if ge.hasLeftMultiplicity() then
+
+					ge.contained->select( e |
+
+						e.isOfKind(UMLDI!AssociationEnd))->
+
+						first().contained->select( e |
+
+							e.isOfType('Multiplicity'))->
+
+							first().getAbsoluteY() +
+
+							ge.contained->select( e |
+
+								e.isOfKind(UMLDI!AssociationEnd))->
+
+								first().contained->select( e |
+
+									e.isOfType('Multiplicity'))->
+
+									first().size.height
+
+					else 0.0 endif
+
+		),
+
+		
+
+		
+		rightMultiplicity: SVG!Text (
+
+			content <- if ge.hasRightMultiplicity() then
+
+				ge.semanticModel.element.connection->
+
+					last().multiplicity.getMultiplicity()
+
+				else '' endif,
+
+			fill <- 'black',
+
+			position <- rightMultPos,
+
+			fontSize <- '10px'
+
+		),
+
+		rightMultPos: SVG!AbsoluteCoord (
+
+			x <- if ge.hasRightMultiplicity() then
+
+				ge.contained->select( e |
+
+					e.isOfKind(UMLDI!AssociationEnd))->
+
+					last().contained->select( e |
+
+						e.isOfType('Multiplicity'))->last().getAbsoluteX()
+
+				else 0.0 endif,
+
+			y <- if ge.hasRightMultiplicity() then
+
+				ge.contained->select( e |
+
+					e.isOfKind(UMLDI!AssociationEnd))->
+
+					last().contained->select( e |
+
+						e.isOfType('Multiplicity'))->last().getAbsoluteY() +
+
+						ge.contained->select( e |
+
+							e.isOfKind(UMLDI!AssociationEnd))->
+
+							last().contained->select( e |
+
+								e.isOfType('Multiplicity'))->last().size.height
+
+				else 0.0 endif
+
+		),
+
+		
+
+		
+		leftRole: SVG!Text (
+
+			content <- if ge.hasLeftRole() then
+
+					ge.semanticModel.element.connection->first().name
+
+				else '' endif,
+
+			fill <- 'black',
+
+			position <- leftRolePos,
+
+			fontSize <- '10px'
+
+		),
+
+		leftRolePos: SVG!AbsoluteCoord (
+
+			x <- if ge.hasLeftRole() then
+
+				ge.contained->select( e |
+
+					e.isOfKind(UMLDI!AssociationEnd))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().getAbsoluteX()
+
+				else 0.0 endif,
+
+			y <- if ge.hasLeftRole() then
+
+				ge.contained->select( e |
+
+					e.isOfKind(UMLDI!AssociationEnd))->
+
+					first().contained->select( e |
+
+						e.isOfType('Name'))->first().getAbsoluteY() +
+
+						ge.contained->select( e |
+
+							e.isOfKind(UMLDI!AssociationEnd))->
+
+							first().contained->select( e |
+
+								e.isOfType('Name'))->first().size.height
+
+				else 0.0 endif
+
+		),
+
+		
+
+		
+		rightRole: SVG!Text (
+
+			content <- if ge.hasRightRole() then
+
+					ge.semanticModel.element.connection->last().name
+
+				else '' endif,
+
+			fill <- 'black',
+
+			position <- rightRolePos,
+
+			fontSize <- '10px'
+
+		),
+
+		rightRolePos: SVG!AbsoluteCoord (
+
+			x <- if ge.hasRightRole() then
+
+				ge.contained->select( e |
+
+					e.isOfKind(UMLDI!AssociationEnd))->
+
+					last().contained->select( e |
+
+						e.isOfType('Name'))->first().getAbsoluteX()
+
+				else 0.0 endif,
+
+			y <- if ge.hasRightRole() then
+
+				ge.contained->select( e |
+
+					e.isOfKind(UMLDI!AssociationEnd))->
+
+					last().contained->select( e |
+
+						e.isOfType('Name'))->first().getAbsoluteY() +
+
+						ge.contained->select( e |
+
+							e.isOfKind(UMLDI!AssociationEnd))->
+
+							last().contained->select( e |
+
+								e.isOfType('Name'))->first().size.height
+
+				else 0.0 endif
+
+		)
+
+}
+
+
+
+		
+		
+		
+		
+rule GraphEdge2Dependency {
+
+	from
+
+		ge: UMLDI!GraphEdge (
+
+			ge.isOfKind(UMLDI!Dependency)
+
+		)
+
+	to
+
+		
+		
+		
+		out: SVG!G (
+
+			name <- ge.semanticModel.element.name,
+
+			root <- thisModule.diagram,
+
+			groupContent <- Sequence {polyline, name}
+
+		),
+
+		
+
+		
+		polyline: SVG!Polyline(
+
+			waypoints <- Sequence {wps}->flatten(),
+
+			stroke <- 'black',
+
+			fill <- 'white',
+
+			strokeDashArray <- '5,5',
+
+			markerEnd <- 'url(#Dependency)',
+
+			markerStart <- 'none'
+
+		),
+
+		wps: distinct SVG!Point foreach (Point in ge.waypoints) (
+
+			position <- PPos
+
+		),
+
+		PPos: distinct SVG!AbsoluteCoord foreach(Point in ge.waypoints) (
+
+			x <- Point.base.x - thisModule.offset.x,
+
+			y <- Point.base.y - thisModule.offset.y
+
+		),
+
+		
+
+		
+		name: SVG!Text (
+
+			content <- ge.getName(),
+
+			fill <- 'black',
+
+			position <- namePos,
+
+			fontSize <- '10px'
+
+		),
+
+		namePos: SVG!AbsoluteCoord (
+
+			x <- if ge.isNamed() then
+
+				ge.contained->select( e |
+
+					e.isOfType('DirectedName'))->first().contained->select( e |
+
+						e.isOfType('Name'))->first().getAbsoluteX()
+
+				else 0.0 endif,
+
+			y <- if ge.isNamed() then
+
+				ge.contained->select( e |
+
+					e.isOfType('DirectedName'))->first().contained->select( e |
+
+						e.isOfType('Name'))->first().getAbsoluteY()
+
+				else 0.0 endif
+
+		)
+
+}
+
+
+
+		
+		
+		
+		
+		
+rule GraphEdge2Generalization {
+
+	from
+
+		ge: UMLDI!GraphEdge (
+
+			ge.isOfKind(UMLDI!Generalization)
+
+			)
+
+	to
+
+		
+		
+		
+		out: SVG!G (
+
+			name <- ge.semanticModel.element.name,
+
+			root <- thisModule.diagram,
+
+			groupContent <- Sequence {polyline, name}
+
+		),
+
+		
+
+		
+		polyline: SVG!Polyline(
+
+			waypoints <- Sequence {wps}->flatten(),
+
+			stroke <- 'black',
+
+			fill <- 'white',
+
+			markerEnd <- 'url(#Generalization)',
+
+			markerStart <- 'none'
+
+		),
+
+		wps: distinct SVG!Point foreach (Point in ge.waypoints) (
+
+			position <- PPos
+
+		),
+
+		PPos: distinct SVG!AbsoluteCoord foreach(Point in ge.waypoints) (
+
+			x <- Point.base.x - thisModule.offset.x,
+
+			y <- Point.base.y - thisModule.offset.y
+
+		),
+
+		
+
+		
+		name: SVG!Text (
+
+			content <- ge.getName(),
+
+			fill <- 'black',
+
+			position <- namePos,
+
+			fontSize <- '10px'
+
+		),
+
+		namePos: SVG!AbsoluteCoord (
+
+			x <- if ge.isNamed() then
+
+				ge.contained->select( e |
+
+					e.isOfType('DirectedName'))->first().contained->select( e |
+
+						e.isOfType('Name'))->first().getAbsoluteX()
+
+				else 0.0 endif,
+
+			y <- if ge.isNamed() then
+
+				ge.contained->select( e |
+
+					e.isOfType('DirectedName'))->first().contained->select( e |
+
+						e.isOfType('Name'))->first().getAbsoluteY()
+
+				else 0.0 endif
+
+		)
+
+}
+
+
+
+		
+		
+		
+		
+		
+rule GraphEdge2Abstraction {
+
+	from
+
+		ge: UMLDI!GraphEdge (
+
+			ge.isOfKind(UMLDI!Abstraction)
+
+		)
+
+	to
+
+		
+		
+		
+		out: SVG!G (
+
+			name <- ge.semanticModel.element.name,
+
+			root <- thisModule.diagram,
+
+			groupContent <- Sequence {polyline, name}
+
+		),
+
+		
+
+		
+		polyline: SVG!Polyline(
+
+			waypoints <- Sequence {wps}->flatten(),
+
+			stroke <- 'black',
+
+			fill <- 'white',
+
+			strokeDashArray <- '5,5',
+
+			markerEnd <- 'url(#Generalization)',
+
+			markerStart <- 'none'
+
+		),
+
+		wps: distinct SVG!Point foreach (Point in ge.waypoints) (
+
+			position <- PPos
+
+		),
+
+		PPos: distinct SVG!AbsoluteCoord foreach(Point in ge.waypoints) (
+
+			x <- Point.base.x - thisModule.offset.x,
+
+			y <- Point.base.y - thisModule.offset.y
+
+		),
+
+		
+
+		
+		name: SVG!Text (
+
+			content <- if ge.isStereotypeNamed() then
+
+				'&#171; ' +
+
+					ge.contained->select( e |
+
+					e .isOfType('StereotypeCompartment'))->
+
+						first().contained->select( e |
+
+							e.isOfKind(UMLDI!Stereotype))->
+
+							first().semanticModel.element.name +
+
+				' &#187;'
+
+				else '' endif,
+
+			fill <- 'black',
+
+			position <- namePos,
+
+			fontSize <- '10px'
+
+		),
+
+		namePos: SVG!AbsoluteCoord (
+
+			x <- if ge.isStereotypeNamed() then
+
+				ge.contained->select( e |
+
+					e .isOfType('StereotypeCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfKind(UMLDI!Stereotype))->first().getAbsoluteX()
+
+				else 0.0 endif,
+
+			y <- if ge.isStereotypeNamed() then
+
+				ge.contained->select( e |
+
+					e .isOfType('StereotypeCompartment'))->
+
+					first().contained->select( e |
+
+						e.isOfKind(UMLDI!Stereotype))->first().getAbsoluteY()
+
+				else 0.0 endif
+
+		)
+
+}
+
+
+
+	
+		
+

@@ -1,0 +1,1132 @@
+
+
+module XML2WSDL; 
+create OUT : WSDL from IN : XML;
+
+
+
+uses XMLHelpers;
+
+
+
+
+
+
+
+helper context XML!Element def: isNegated() : Boolean =
+
+	let kolekcija : Sequence(XML!Attribute) = self.children->select(c | c.oclIsKindOf(XML!Attribute) and c.name = 'r2ml:isNegated') in
+
+	if kolekcija->isEmpty()
+
+	then
+
+		false
+
+	else 
+		let vred : String = kolekcija->first().value in
+
+		if vred = 'true'
+
+		then
+
+			true
+
+		else 
+
+			false
+
+		endif
+
+	endif;
+
+
+
+helper context XML!Element def : allSubElements : Sequence(XML!Element) = 
+
+	let subElems : Sequence(XML!Element) = 
+
+		XML!Element.allInstances()->select(c |      			
+			c.parent = self
+
+		)->collect(elems | elems.allSubElements)->flatten()  in 
+		subElems->union( 										
+																
+			self.children->select(ch | ch.oclIsTypeOf(XML!Element)
+
+	    ))->flatten();
+
+
+
+helper context XML!Element def : allSubAttributes : Sequence(XML!Attribute) = 
+
+	let subAttrs : Sequence(XML!Attribute) = 
+
+    	XML!Element.allInstances()->select(c | 
+
+        	c.parent = self
+
+		)->collect(attrs | attrs.allSubAttributes)->flatten()  in
+
+		subAttrs->union(
+
+			self.children->select(at | at.oclIsTypeOf(XML!Attribute)
+
+		))->flatten();
+
+
+
+
+
+helper context XML!Element def: resolveMEP() : XML!Element =
+
+	let value : String = self.getAttrVal('pattern') in
+
+	
+
+	if value = 'http://www.w3.org/2006/01/wsdl/in-out' then
+
+			#inout
+
+		else if value = 'http://www.w3.org/2006/01/wsdl/inonly' then
+
+				#inonly
+
+			else if value = 'http://www.w3.org/2006/01/wsdl/out-in' then
+
+					#outin
+
+				else if value = 'http://www.w3.org/2006/01/wsdl/robustoutonly' then
+
+						#robustoutonly
+
+					else if value = 'http://www.w3.org/2006/01/wsdl/outonly' then
+
+							#outonly
+
+						else if value = 'http://www.w3.org/2006/01/wsdl/robustinonly' then
+
+								#robust_in_only
+
+							else if value = 'http://www.w3.org/2006/01/wsdl/outoptionalin' then
+
+									#outoptionalin
+
+								else if value = 'http://www.w3.org/2006/01/wsdl/inoptionalout' then
+
+										#inoptionalout
+
+								else OclUndefined
+
+								endif
+
+							endif
+
+						endif
+
+					endif
+
+				endif
+
+			endif
+
+		endif
+
+	endif;
+
+							
+
+	
+
+helper context XML!Element def: resolveMessageFormat() : XML!Element =
+
+	let value : String = self.getAttrVal('type') in
+
+
+
+	if value = 'http://www.w3.org/2006/01/wsdl/soap' then
+
+			#SOAP12
+
+		else if value = 'http://www.w3.org/2006/01/wsdl/HTTP' then
+
+				#HTTP
+
+			else  #SOAP11
+
+			endif
+
+	endif;
+
+
+
+helper context XML!Element def: resolveProtocol() : XML!Element =
+
+	let value : String = self.getAttrVal('wsoap:protocol') in
+
+	
+
+	if value = 'http://www.w3.org/2003/05/soap/bindings/HTTP' then
+
+		#HTTP
+
+	else #SMTP
+
+	endif;				  
+
+	
+
+
+
+helper context XML!Element def: resolveSOAPMEP() : XML!Element =
+
+	let value : String = self.getAttrVal('wsoap:mep') in
+
+	
+
+	if value = 'http://www.w3.org/2003/05/soap/mep/request-response' then
+
+  		#requestresponse
+
+	else #soapresponse
+
+	endif;				  
+
+
+
+helper context XML!Element def: resolveFaultCodeEnum() : XML!Element = 
+
+	let value : String = self.getAttrVal('wsoap:code') in
+
+	
+
+	if value = 'soap:Sender' then
+
+  		#Sender
+
+	else OclUndefined
+
+	endif;				  
+
+
+
+
+
+helper def: splitNameSpace(str2split : String, str2return : String) : String =
+
+	let strSeq : Sequence(String) = str2split.split(':') in
+
+	if strSeq->size() = 2 then
+
+		if str2return = 'beforeColon' then
+
+			strSeq->first()
+
+		else if str2return = 'afterColon' then
+
+				strSeq->last()
+
+			 else OclUndefined
+
+			 endif
+
+		endif
+
+	else OclUndefined
+
+	endif;
+
+
+
+
+
+helper context XML!Element def: getBindingReference() : XML!Element =
+
+    XML!Element.allInstances()->
+
+	select(e | e.name = 'binding' and 
+
+		e.getAttrVal('name') = self.getAttrVal('binding'))->first();
+
+
+
+
+
+helper context XML!Element def: getInterfaceReference() : XML!Element =
+
+    XML!Element.allInstances()->
+
+	select(e | e.name = 'interface' and
+
+		e.getAttrVal('name') = self.getAttrVal('interface'))->first();	
+
+
+
+
+
+helper context XML!Element def: getFaultReference() : XML!Element =
+
+    XML!Element.allInstances()->
+
+	select(e | e.name = 'fault' and
+
+		e.getAttrVal('name') = self.getAttrVal('ref'))->first();	
+
+
+
+
+
+helper context XML!Element def: getOperationReference() : XML!Element =
+
+    XML!Element.allInstances()->
+
+	select(e | e.name = 'operation' and
+
+		e.getAttrVal('name') = self.getAttrVal('ref'))->first();	
+
+
+
+
+
+helper context XML!Element def: getElementReference() : XML!Element =
+
+    XML!Element.allInstances()->
+
+	select(e | e.name = 'xs:element' and
+
+		e.getAttrVal('name') = self.getAttrVal('element'))->first();	
+
+
+
+
+
+helper context XML!Element def: getRefElementReference() : XML!Element =
+
+    XML!Element.allInstances()->
+
+	select(e | e.name = 'xs:element' and
+
+		e.getAttrVal('name') = self.getAttrVal('ref'))->first();	
+
+
+
+
+
+helper context XML!Element def: isSimpleType() : Boolean =
+
+	let name : String = self.name in
+
+	let type : String = 
+
+		if name = 'xs:element' then 
+
+			self.getAttrVal('type')
+
+		else 
+
+			OclUndefined
+
+		endif
+
+	in
+
+	
+
+	if not type.oclIsUndefined() then
+
+	    if type = 'xs:string' then
+
+			true
+
+		else if type = 'xs:boolean' then
+
+				true
+
+			else if type = 'xs:decimal' then
+
+					true
+
+				else if type = 'xs:float' then
+
+					true
+
+					else if type = 'xs:double' then
+
+						true
+
+						else if type = 'xs:duration' then
+
+							true
+
+							else if type = 'xs:dateTime' then
+
+								true
+
+								else if type = 'xs:time' then
+
+									true
+
+									else if type = 'xs:date' then
+
+										true
+
+										else if type = 'xs:gYearMonth' then
+
+											true
+
+											else if type = 'xs:gYear' then
+
+												true
+
+												else if type = 'xs:gMonthDay' then
+
+													true
+
+													else if type = 'xs:gDay' then
+
+														true
+
+														else if type = 'xs:gMonth' then
+
+															true
+
+															else if type = 'xs:hexBinary' then
+
+																true
+
+																else if type = 'xs:base64Binary' then
+
+																	true
+
+																	else if type = 'xs:anyURI' then
+
+																		true
+
+																		else if type = 'xs:QName' then
+
+																			true
+
+																			else if type = 'xs:NOTATION' then
+
+																					true
+
+																			 	else
+
+																					false
+
+			 																	endif
+
+																			endif
+
+																		endif
+
+																	endif
+
+																endif
+
+															endif
+
+														endif
+
+													endif
+
+												endif
+
+											endif
+
+										endif
+
+									endif
+
+								endif
+
+							endif
+
+						endif
+
+					endif
+
+				endif
+
+			endif
+
+		endif
+
+	 else
+
+	 	false
+
+	 endif;
+
+
+
+helper context XML!Element def: getDefaultSimpleType() : XML!Attribute =
+
+    XML!Element.allInstances()->
+
+	select(e | e.name = 'xs:element' and e.getAttrVal('type') = self.getAttrVal('type'))->
+
+	flatten()->first().getAttr('type')->asSequence()->first();
+
+
+
+
+
+
+
+rule Description {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'description'
+
+			)		
+
+	to
+
+		o : WSDL!Description (                 
+
+				types <- i.getElementsByName('types'),
+
+				interface <- i.getElementsByName('interface'),
+
+				binding <- i.getElementsByName('binding'),
+
+				service <- i.getElementsByName('service')				
+
+		)
+
+}
+
+
+
+
+
+rule ElementType {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'types'
+
+			)		
+
+	to
+
+		o : WSDL!ElementType (                 
+
+				schema <- i.getElementsByName('xs:schema').first()
+
+		)
+
+}
+
+
+
+rule XsSchema {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'xs:schema'
+
+			)		
+
+	to
+
+		o : WSDL!XsSchema (
+
+			    schemaLocation <- i.getAttrVal('xmlns'),
+
+				targetNamespace <- i.getAttrVal('targetNamespace'),
+
+				elementDeclarations <- i.getElementsByName('xs:element'),
+
+				typeDefinitions <- i.getElementsByName('xs:complexType')
+
+		)
+
+}
+
+
+
+rule XsComplexTypeDefinition {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'xs:complexType' 
+
+			)		
+
+	to
+
+		o : WSDL!XsComplexTypeDefinition (                 
+
+				name <- i.getAttrVal('name'),
+
+				content <- con
+
+			),
+
+		con : WSDL!XsParticle (
+
+				term <- ter
+
+			),
+
+		ter : WSDL!XsModelGroup (
+
+				compositor <- #sequence,
+
+				particles <- i.getElementsByName('xs:sequence').first().getElementsByName('xs:element')->asSequence()
+
+			)
+
+}
+
+
+
+
+
+unique lazy rule SimpleType {
+
+	from i : XML!Attribute
+
+	to 
+
+		o : WSDL!XsSimpleTypeDefinition (
+
+			name <- i.value
+
+		)		
+
+}
+
+
+
+
+
+rule XsElementDeclaration {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'xs:element' and not
+
+					if not i.parent.oclIsUndefined() then
+
+						i.parent.name = 'xs:sequence'
+
+					else true
+
+					endif
+
+			)		
+
+	to
+
+		ele : WSDL!XsElementDeclaration (
+
+				name <- i.getAttrVal('name'),
+
+				typeDefinition <- if (i.isSimpleType()) then
+
+				 					thisModule.SimpleType( i.getDefaultSimpleType() )
+
+								else 
+
+									if  not i.getElementsByName('xs:complexType')->isEmpty()  then
+
+										i.getElementsByName('xs:complexType').first()
+
+									else
+
+										if i.hasAttr('type') then
+
+											XML!Element.allInstances()->select(e | e.name = 'xs:complexType')->select(e | e.getAttrVal('name') = i.getAttrVal('type'))->asSequence()->first()
+
+										else
+
+											OclUndefined
+
+										endif									
+
+									endif
+
+								endif
+
+			)	
+
+}
+
+
+
+rule SequenceElementDeclaration {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'xs:element' and
+
+					if not i.parent.oclIsUndefined() then
+
+						i.parent.name = 'xs:sequence'
+
+					else false
+
+					endif				
+
+			)		
+
+	to
+
+		o : WSDL!XsParticle (                 
+
+				content <- ele
+
+			),
+
+		ele : WSDL!XsElementDeclaration (
+
+				name <- i.getAttrVal('name'),
+
+				typeDefinition <- if (i.isSimpleType()) then
+
+									thisModule.SimpleType( i.getDefaultSimpleType() )
+
+								else 
+
+									if  not i.getElementsByName('xs:complexType')->isEmpty() then
+
+										i.getElementsByName('xs:complexType').first()
+
+									else
+
+										if i.hasAttr('type') then
+
+											XML!Element.allInstances()->select(e | e.name = 'xs:complexType')->select(e | e.getAttrVal('name') = i.getAttrVal('type'))->asSequence()->first()
+
+										else
+
+											OclUndefined
+
+										endif	
+
+									endif
+
+								endif,
+
+				resolvedElementDeclaration <- if i.hasAttr('ref') then
+
+												i.getRefElementReference()
+
+											  else OclUndefined
+
+											  endif
+
+			)
+
+}
+
+
+
+rule Interface {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'interface'
+
+			)		
+
+	to
+
+		o : WSDL!Interface (                 
+
+				name <- i.getAttrVal('name'),
+
+				fault <- i.getElementsByName('fault'),
+
+				operation <- i.getElementsByName('operation')
+
+		)
+
+}
+
+
+
+
+
+rule Fault {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'fault' and not
+
+					if not i.parent.oclIsUndefined() then
+
+						i.parent.name = 'binding'
+
+					else true
+
+					endif
+
+			)		
+
+	to
+
+		o : WSDL!Fault (                 
+
+				name <- i.getAttrVal('name'),
+
+				element <- i.getElementReference(),
+
+				elementNS <- thisModule.splitNameSpace(i.getAttrVal('element'),'beforeColon')
+
+		)
+
+}
+
+
+
+rule Operation {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'operation' and
+
+					if not i.parent.oclIsUndefined() then
+
+						i.parent.name = 'interface'
+
+					else false
+
+					endif
+
+			)		
+
+	to
+
+		o : WSDL!Operation (                 
+
+				name <- i.getAttrVal('name'),
+
+				pattern <- i.resolveMEP(),
+
+				input <- i.getElementsByName('input'),
+
+				output <- i.getElementsByName('output'),
+
+				infault <- i.getElementsByName('infault'),
+
+				outfault <- i.getElementsByName('outfault')
+
+		)
+
+
+
+}
+
+
+
+rule Input {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'input'
+
+			)		
+
+	to
+
+		o : WSDL!Input (                 
+
+				messageLabel <- i.getAttrVal('messageLabel'),
+
+				element <- i.getElementReference(),
+
+				elementNS <- thisModule.splitNameSpace(i.getAttrVal('element'),'beforeColon')
+
+		)
+
+}
+
+
+
+rule Output {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'output'
+
+			)		
+
+	to
+
+		o : WSDL!Output (                 
+
+				messageLabel <- i.getAttrVal('messageLabel'),
+
+				element <- i.getElementReference(),
+
+				elementNS <- thisModule.splitNameSpace(i.getAttrVal('element'),'beforeColon')
+
+		)
+
+}
+
+
+
+rule Infault {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'infault'
+
+			)		
+
+	to
+
+		o : WSDL!Infault (                 
+
+				messageLabel <- i.getAttrVal('messageLabel'),
+
+				fault <- i.getFaultReference(),
+
+				faultNS <- thisModule.splitNameSpace(i.getAttrVal('ref'),'beforeColon')
+
+		)
+
+}
+
+
+
+rule Outfault {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'outfault'
+
+			)		
+
+	to
+
+		o : WSDL!Outfault (                 
+
+				messageLabel <- i.getAttrVal('messageLabel'),
+
+				fault <- i.getFaultReference(),
+
+				faultNS <- thisModule.splitNameSpace(i.getAttrVal('ref'),'beforeColon')
+
+		)
+
+}
+
+
+
+rule Binding {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'binding'
+
+			)		
+
+	to
+
+		o : WSDL!Binding (                 
+
+				name <- i.getAttrVal('name'),
+
+				type <- i.resolveMessageFormat(),
+
+				wsoap_protocol <- if i.hasAttr('wsoap:protocol') = true then
+
+									i.resolveProtocol()
+
+								 else OclUndefined
+
+								 endif,	
+
+				bindingOperation <- i.getElementsByName('operation'),
+
+				bindingFault <- i.getElementsByName('fault'),
+
+				interface <- i.getInterfaceReference(),
+
+				interfaceNS <- thisModule.splitNameSpace(i.getAttrVal('interface'),'beforeColon')
+
+		)
+
+}
+
+
+
+
+
+rule BindingOperation {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'operation' and 
+
+					if not i.parent.oclIsUndefined() then
+
+						i.parent.name = 'binding'
+
+					else false
+
+					endif
+
+			)		
+
+	to
+
+		o : WSDL!BindingOperation (                 
+
+				wsoap_mep <- if i.hasAttr('wsoap:mep') = true then
+
+								i.resolveSOAPMEP()
+
+							 else OclUndefined	
+
+							 endif,
+
+				operation <- i.getOperationReference(),
+
+				operationNS <- thisModule.splitNameSpace(i.getAttrVal('ref'),'beforeColon')
+
+		)
+
+}
+
+
+
+rule BindingFault {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'fault' and 
+
+					if not i.parent.oclIsUndefined() then
+
+						i.parent.name = 'binding'
+
+					else false
+
+					endif
+
+			)		
+
+	to
+
+		o : WSDL!BindingFault (                 
+
+				wsoap_code <- if i.hasAttr('wsoap:code') = true then
+
+								i.resolveFaultCodeEnum()
+
+							 else OclUndefined	
+
+							 endif,
+
+				fault <- i.getFaultReference(),
+
+				faultNS <- thisModule.splitNameSpace(i.getAttrVal('ref'),'beforeColon')
+
+		)
+
+}
+
+
+
+
+
+rule Service {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'service'
+
+			)		
+
+	to
+
+		o : WSDL!Service (                 
+
+				name <- i.getAttrVal('name'),
+
+				endpoint <- i.getElementsByName('endpoint'),
+
+				interface <- i.getInterfaceReference(),
+
+				interfaceNS <- thisModule.splitNameSpace(i.getAttrVal('interface'),'beforeColon')
+
+		)
+
+}
+
+
+
+
+
+rule Endpoint {
+
+	from
+
+		i : XML!Element (
+
+				i.name = 'endpoint' 
+
+			)		
+
+	to
+
+		o : WSDL!Endpoint (                 
+
+				name <- i.getAttrVal('name'),
+
+				address <- i.getAttrVal('address'),
+
+				binding <- i.getBindingReference(),
+
+				bindingNS <- thisModule.splitNameSpace(i.getAttrVal('binding'),'beforeColon')
+
+		)
+
+}
+
+
+
+
+

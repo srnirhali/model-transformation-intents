@@ -1,0 +1,134 @@
+module PathExp2PetriNet;
+
+create OUT : PetriNet from IN : PathExp;
+
+
+
+
+
+
+
+
+
+helper def: allTransitions : Set(PathExp!Transition) = 
+
+	PathExp!Transition.allInstances();
+
+
+
+
+
+
+
+
+
+rule Main {
+
+	from
+
+        pe : PathExp!PathExp
+
+	to 
+
+		pn : PetriNet!PetriNet (
+
+			name <- pe.name,
+
+			places <- pe.states,
+
+			transitions <- pe.transitions,
+
+			arcs <- thisModule.allTransitions
+
+						->collect(e | thisModule.resolveTemp(e, 'pn_ia'))
+
+						->union(
+
+							thisModule.allTransitions
+
+							->collect(e | thisModule.resolveTemp(e, 'pn_oa'))
+
+						)
+
+		)
+
+}
+
+
+
+
+
+rule State {
+
+	from
+
+       pe_s : PathExp!State
+
+	to 
+
+		pn_p : PetriNet!Place (
+
+			name <- '',
+
+			incoming <-	pe_s.incoming
+
+							->collect(e | thisModule.resolveTemp(e, 'pn_oa')),
+
+			outgoing <- pe_s.outgoing
+
+							->collect(e | thisModule.resolveTemp(e, 'pn_ia'))
+
+		)
+
+}
+
+
+
+
+
+rule Transition {
+
+	from
+
+       pe_t : PathExp!Transition
+
+	to 
+
+		pn_t : PetriNet!Transition (
+
+			name <- '',
+
+			incoming <- pn_ia,
+
+			outgoing <- pn_oa
+
+		),
+
+		
+
+		pn_ia : PetriNet!PlaceToTransArc (
+
+			source <- pe_t.source,
+
+			target <- pn_t,
+
+			weight <- 1
+
+		),
+
+		
+
+		pn_oa : PetriNet!TransToPlaceArc (
+
+			source <- pn_t,
+
+			target <- pe_t.target,
+
+			weight <- 1			
+
+		)
+
+}
+
+
+

@@ -1,0 +1,344 @@
+
+
+module TT2BDD;
+
+create OUT:BDD from IN:TT;
+
+
+
+rule TruthTable2BDD {
+
+   from src : TT!TruthTable
+
+   to dest : BDD!BDD
+
+      (
+
+         name <- src.name,
+
+         ports <- src.ports,
+
+         tree <- src.getTree().cell
+
+      )
+
+}
+
+
+
+rule InputPort2InputPort {
+
+   from src : TT!InputPort
+
+   to dest : BDD!InputPort
+
+      (
+
+         name <- src.name
+
+      )
+
+}
+
+
+
+rule OutputPort2OutputPort {
+
+   from src : TT!OutputPort
+
+   to dest : BDD!OutputPort
+
+      (
+
+         name <- src.name
+
+      )
+
+}
+
+
+
+rule Row2Leaf {
+
+   from src : TT!Row
+
+   to dest : BDD!Leaf
+
+      (
+
+         assignments <- src.cells->select(c | c.port.oclIsKindOf(TT!OutputPort))
+
+      )
+
+}
+
+
+
+rule Cell2Assignment {
+
+   from src: TT!Cell (src.port.oclIsKindOf(TT!OutputPort))
+
+   to dest : BDD!Assignment
+
+      (
+
+         value <- src.value,
+
+         port <- src.port
+
+      )
+
+}
+
+
+
+rule Cell2Subtree {
+
+   from src: TT!Cell (not src.getNode().oclIsUndefined())
+
+   using {
+
+      node : TupleType( cell : TT!Cell , zeroSubtree : OclAny , oneSubtree : OclAny ) =
+
+         src.getNode();
+
+   }
+
+   to dest : BDD!Subtree
+
+      (
+
+         port <- src.port,
+
+         treeForZero <-
+
+            if node.zeroSubtree.oclIsKindOf(TT!Row) then
+
+               node.zeroSubtree
+
+            else
+
+               node.zeroSubtree.cell
+
+            endif,
+
+         treeForOne <-
+
+            if node.oneSubtree.oclIsKindOf(TT!Row) then
+
+               node.oneSubtree
+
+            else
+
+               node.oneSubtree.cell
+
+            endif
+
+      )
+
+}
+
+
+
+helper def:
+
+   getPartition(rows : Sequence(TT!Row), port : TT!Port)
+
+      : TupleType( zeroPart : Sequence(TT!Row) , onePart : Sequence(TT!Row) ) =
+
+      
+
+      
+      let _zeroPart : Sequence(TT!Row) =
+
+         rows->select(r |
+
+            r.cells->exists(c |
+
+               c.port = port and c.value = false
+
+            )
+
+         ) in
+
+         
+
+      
+      let _onePart : Sequence(TT!Row) =
+
+         rows->select(r |
+
+            r.cells->exists(c |
+
+               c.port = port and c.value = true
+
+            )
+
+         ) in
+
+
+
+      
+      Tuple{
+
+         zeroPart = _zeroPart,
+
+         onePart = _onePart
+
+      };
+
+
+
+helper def:
+
+   getTree(rows : Sequence(TT!Row), usablePorts : Sequence(TT!Port))
+
+      : TupleType( cell : TT!Cell , zeroSubtree : OclAny , oneSubtree : OclAny ) =
+
+
+
+      
+      
+      let _port : TT!Port =
+
+         usablePorts->any(p |
+
+            rows->forAll(r |
+
+               r.cells->collect(c | c.port)
+
+                     ->includes(p)
+
+            )
+
+         ) in
+
+      
+
+      
+      let _cell : TT!Cell =
+
+         rows->first().cells->any(c | c.port = _port) in
+
+         
+
+      
+      let _part : TupleType( zeroPart : Sequence(TT!Row), onePart : Sequence(TT!Row) ) =
+
+         thisModule.getPartition(rows, _port) in
+
+
+
+      
+      let _updatedPorts : Sequence(TT!Port) =
+
+         usablePorts->excluding(_port) in
+
+            
+
+      
+      Tuple{
+
+         cell = _cell,
+
+         zeroSubtree =
+
+            if _part.zeroPart->size() = 1 then
+
+               _part.zeroPart->first()
+
+            else
+
+               thisModule.getTree(_part.zeroPart, _updatedPorts)
+
+            endif,
+
+         oneSubtree =
+
+            if _part.onePart->size() = 1 then
+
+               _part.onePart->first()
+
+            else
+
+               thisModule.getTree(_part.onePart, _updatedPorts)
+
+            endif
+
+      };
+
+
+
+helper context TT!TruthTable def:
+
+   getTree()
+
+      : TupleType( cell : TT!Cell , zeroSubtree : OclAny , oneSubtree : OclAny ) =
+
+      thisModule.getTree(self.rows, self.ports->select(p | p.oclIsKindOf(TT!InputPort)));
+
+      
+
+helper def:
+
+   findCell(cell : TT!Cell, tree : TupleType( cell : TT!Cell, zeroSubtree : OclAny, oneSubtree : OclAny ))
+
+      : TupleType( cell : TT!Cell , zeroSubtree : OclAny , oneSubtree : OclAny ) =
+
+
+
+      if tree.cell = cell then
+
+         tree
+
+      else if tree.zeroSubtree.oclIsKindOf(TT!Row) then
+
+         if tree.oneSubtree.oclIsKindOf(TT!Row) then
+
+            
+            Sequence{}->first()
+
+         else
+
+            
+            thisModule.findCell(cell,tree.oneSubtree)
+
+         endif
+
+      else
+
+         let tryInZero : OclAny = thisModule.findCell(cell,tree.zeroSubtree) in
+
+         if tree.oneSubtree.oclIsKindOf(TT!Row) then
+
+            
+            tryInZero
+
+         else if tryInZero.oclIsUndefined() then
+
+            
+            
+            thisModule.findCell(cell,tree.oneSubtree)
+
+         else
+
+            
+            
+            tryInZero
+
+         endif endif
+
+      endif endif;
+
+
+
+helper context TT!Cell def:
+
+   getNode() 
+
+      : TupleType( cell : TT!Cell , zeroSubtree : OclAny , oneSubtree : OclAny ) =
+
+
+
+      thisModule.findCell(self, self.owner.owner.getTree());
+

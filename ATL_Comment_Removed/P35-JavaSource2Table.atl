@@ -1,0 +1,157 @@
+
+
+module JavaSource2Table;
+
+create OUT : Table from IN : JavaSource;
+
+
+
+
+
+helper def: allMethodDefs : Sequence(JavaSource!MethodDefinition) =
+
+	JavaSource!MethodDefinition.allInstances()
+
+		->sortedBy(e | e.class.name + '_' + e.name);
+
+
+
+helper context JavaSource!MethodDefinition
+
+	def : computeContent(col : JavaSource!MethodDefinition) : String =
+
+	self.invocations
+
+		->select(i | i.method.name = col.name
+
+					and i.method.class.name = col.class.name)
+
+		->size();
+
+
+
+
+
+rule Main {
+
+	from
+
+		s : JavaSource!JavaSource
+
+		
+
+	to
+
+		
+		t : Table!Table (
+
+			rows <-
+
+				Sequence{first_row,
+
+						 thisModule.allMethodDefs
+
+						 	->collect(e | thisModule.resolveTemp(e, 'row'))
+
+						 }
+
+		),
+
+		
+		first_row : Table!Row (
+
+			cells <- Sequence{first_col, thisModule.allMethodDefs -> 
+
+				collect(md | thisModule.TitleCols(md))} -> flatten()
+
+		),
+
+		
+		first_col : Table!Cell (
+
+			content <- ''
+
+		)
+
+		
+
+		
+		
+		
+		
+		
+		
+		
+}
+
+
+
+unique lazy rule TitleCols {
+
+	from
+
+		md: JavaSource!MethodDefinition
+
+	to
+
+		tFilled: Table!Cell (
+
+			content <- md.class.name + '.' + md.name
+
+		)
+
+}
+
+
+
+rule MethodDefinition {
+
+	from
+
+		m : JavaSource!MethodDefinition
+
+
+
+	to
+
+		
+		row : Table!Row (
+
+			cells <- Sequence{title_cel, thisModule.allMethodDefs ->
+
+				collect(md | thisModule.DataCells(md, m))} -> flatten()
+
+		),
+
+		
+		title_cel : Table!Cell (
+
+			content <- m.class.name + '.' + m.name
+
+		)
+
+		
+}
+
+
+
+lazy rule DataCells {
+
+	from
+
+		md: JavaSource!MethodDefinition,
+
+		m: JavaSource!MethodDefinition
+
+	to
+
+		cell: Table!Cell (
+
+			content <- m.computeContent(md).toString()
+
+		)
+
+}
+
+
+

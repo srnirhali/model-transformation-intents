@@ -1,0 +1,756 @@
+module TextualPathExp2PathExp;
+
+create OUT : PathExp from IN : TextualPathExp;
+
+
+
+
+
+
+
+helper def: root : TextualPathExp!TextualPathExp = 
+
+	TextualPathExp!TextualPathExp.allInstances()
+
+		->asSequence()->first();
+
+
+
+
+
+helper def: rootTrans : TextualPathExp!Transition = 
+
+	thisModule.root.path.transitions->first();
+
+
+
+
+
+helper def: leafTrans : TextualPathExp!Transition = 
+
+	thisModule.root.path.transitions->last();
+
+
+
+
+
+helper def: allPaths : Set(TextualPathExp!Path) = 
+
+	TextualPathExp!Path.allInstances();
+
+
+
+
+
+helper def: altPaths : Set(TextualPathExp!Path) = 
+
+	thisModule.allPaths
+
+		->select(a |
+
+			TextualPathExp!AlternativeTrans.allInstances()
+
+				->collect(b | b.altPaths)
+
+				->flatten()
+
+				->includes(a)
+
+		);
+
+
+
+
+
+helper def: primTransitions : Set(TextualPathExp!PrimitiveTrans) = 
+
+	TextualPathExp!Path.allInstances()
+
+		->select(a |
+
+			not TextualPathExp!AlternativeTrans.allInstances()
+
+				->collect(b | b.altPaths)
+
+				->flatten()
+
+				->includes(a)
+
+		)
+
+		->collect(p | p.transitions)
+
+		->flatten()
+
+		->select(c | c.oclIsTypeOf(TextualPathExp!PrimitiveTrans));
+
+
+
+
+
+helper def: singlePrimTransitions : Set(TextualPathExp!PrimitiveTrans) = 
+
+	thisModule.primTransitions->select(c | c.isMultiple = false);
+
+
+
+
+
+helper def: multiplePrimTransitions : Set(TextualPathExp!PrimitiveTrans) = 
+
+	thisModule.primTransitions->select(c | c.isMultiple = true);
+
+
+
+
+
+helper def: altTransitions1 : Set(TextualPathExp!PrimitiveTrans) = 
+
+	thisModule.altPaths
+
+		->collect(p | p.transitions)
+
+		->iterate(e;
+
+				  res : Sequence(Sequence(TextualPathExp!Transition)) = Set{} |
+
+			res->including(e->subSequence(1, e->size()-1))
+
+		)
+
+		->asSequence()
+
+		->flatten()
+
+		->select(c | c.oclIsTypeOf(TextualPathExp!PrimitiveTrans));
+
+
+
+
+
+helper def: singleAltTransitions1 : Set(TextualPathExp!PrimitiveTrans) = 
+
+	thisModule.altTransitions1->select(c | c.isMultiple = false);
+
+
+
+
+
+helper def: multipleAltTransitions1 : Set(TextualPathExp!PrimitiveTrans) = 
+
+	thisModule.altTransitions1->select(c | c.isMultiple = true);
+
+
+
+
+
+helper def: altTransitions2 : Set(TextualPathExp!PrimitiveTrans) = 
+
+	thisModule.altPaths
+
+		->collect(p | p.transitions)
+
+		->iterate(e;
+
+				  res : Sequence(Sequence(TextualPathExp!Transition)) = Set{} |
+
+			res->including(e->last())
+
+		)
+
+		->asSequence()
+
+		->flatten()
+
+		->select(c | c.oclIsTypeOf(TextualPathExp!PrimitiveTrans));
+
+
+
+
+
+helper context TextualPathExp!Transition
+
+	def: getPath() :  TextualPathExp!Path = 
+
+	thisModule.allPaths
+
+		->select(a | a.transitions->includes(self))
+
+		->first();
+
+
+
+
+
+helper context TextualPathExp!PrimitiveTrans
+
+	def: isLastOfPath() : Boolean = 
+
+	let p : TextualPathExp!Path = self.getPath()
+
+	in self = p.transitions->last();
+
+	
+
+
+
+helper context TextualPathExp!PrimitiveTrans
+
+	def: isFirstOfPath() : Boolean = 
+
+	let p : TextualPathExp!Path = self.getPath()
+
+	in self = p.transitions->first();
+
+
+
+		
+
+helper context TextualPathExp!PrimitiveTrans
+
+	def: getLoopTarget() : TextualPathExp!Transition = 
+
+	let p : TextualPathExp!Path = self.getPath()
+
+	in let i : Integer = p.transitions->indexOf(self)
+
+	in p.transitions->at(i-1);
+
+
+
+
+
+helper context TextualPathExp!PrimitiveTrans
+
+	def: loopIncoming() : Boolean = 
+
+	let p : TextualPathExp!Path = self.getPath()
+
+	in let i : Integer = p.transitions->indexOf(self)
+
+	in if self = p.transitions->last() then
+
+			false
+
+	   else
+
+			p.transitions->at(i+1).isMultiple
+
+	   endif;
+
+
+
+
+
+helper context TextualPathExp!PrimitiveTrans
+
+	def: getLoopIncoming() : TextualPathExp!Transition = 
+
+	let p : TextualPathExp!Path = self.getPath()
+
+	in let i : Integer = p.transitions->indexOf(self)
+
+	in p.transitions->at(i + 1);
+
+
+
+
+
+helper context TextualPathExp!Transition
+
+	def: getOutgoing() : Set(TextualPathExp!PrimitiveTrans) = 
+
+	let p : TextualPathExp!Path = self.getPath()
+
+	in let i : Integer = p.transitions->indexOf(self)
+
+	in let t : TextualPathExp!Transition = p.transitions->at(i + 1)
+
+	in if t.oclIsTypeOf(TextualPathExp!PrimitiveTrans) then
+
+			if not t.isMultiple then 
+
+				Set{t}
+
+			else
+
+				t.getOutgoing()
+
+			endif
+
+	   else
+
+		t.altPaths
+
+			->iterate(e; res : Set(TextualPathExp!PrimitiveTrans) = Set{} |
+
+				res->including(e.transitions->first()) 
+
+			)
+
+	   endif;
+
+
+
+
+
+helper context TextualPathExp!PrimitiveTrans
+
+	def: getPreviousTransition() : TextualPathExp!Transition = 
+
+	let p : TextualPathExp!Path = self.getPath() in
+
+	if self.isFirstOfPath() then
+
+		let alt : TextualPathExp!AlternativeTrans =
+
+			TextualPathExp!AlternativeTrans.allInstances()
+
+				->select(a | a.altPaths->includes(p))
+
+				->first()
+
+		in let p2 : TextualPathExp!Path =
+
+			thisModule.allPaths
+
+				->select(a | a.transitions->includes(alt))
+
+				->first()
+
+		in let i : Integer = p2.transitions->indexOf(alt)
+
+		in let t : TextualPathExp!Transition = 
+
+			p2.transitions->at(i-1) in
+
+		if t.isMultiple then
+
+			t.getPreviousTransition()
+
+		else
+
+			t
+
+		endif
+
+	else
+
+		let i : Integer = p.transitions->indexOf(self)
+
+		in let t : TextualPathExp!Transition = 
+
+			p.transitions->at(i-1) in
+
+		if t.isMultiple then
+
+			t.getPreviousTransition()
+
+		else
+
+			t
+
+		endif
+
+	endif;
+
+		
+
+
+
+
+
+rule Main {
+
+	from
+
+        tpe : TextualPathExp!TextualPathExp
+
+	to 
+
+		pe : PathExp!PathExp (
+
+			name <- '',
+
+			states <- Set{
+
+						thisModule.singlePrimTransitions
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_s')),
+
+						thisModule.singleAltTransitions1
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_s')),
+
+						TextualPathExp!AlternativeTrans.allInstances()
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_s')),
+
+						pe_s
+
+						},
+
+			transitions <- Set{
+
+						thisModule.primTransitions
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_t')),
+
+						thisModule.altTransitions1
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_t')),
+
+						thisModule.altTransitions2
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_t'))
+
+							}
+
+		),
+
+		
+
+		pe_s : PathExp!State (
+
+			incoming <- Set{},
+
+			outgoing <- Set{thisModule.rootTrans}
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_t'))
+
+		)
+
+}
+
+
+
+
+
+rule AlternativeTrans {
+
+	from
+
+		tpe_at : TextualPathExp!AlternativeTrans (
+
+			true
+
+		)
+
+	to 
+
+		pe_s : PathExp!State (
+
+			incoming <- thisModule.altTransitions2
+
+							->select(a | tpe_at.altPaths
+
+								->collect(b | b.transitions)
+
+								->flatten()
+
+								->includes(a)
+
+							),
+
+			outgoing <- tpe_at.getOutgoing()
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_t'))
+
+		)
+
+}
+
+
+
+
+
+
+
+
+
+rule SinglePrimitiveTrans {
+
+	from
+
+       tpe_pt : TextualPathExp!PrimitiveTrans (
+
+			thisModule.singlePrimTransitions->includes(tpe_pt)
+
+       	)
+
+	to 
+
+		pe_t : PathExp!Transition (
+
+			name <- tpe_pt.name,
+
+			source <- 
+
+					if tpe_pt = thisModule.rootTrans then
+
+						thisModule.resolveTemp(thisModule.root, 'pe_s')
+
+					else
+
+						let p : TextualPathExp!Path = tpe_pt.getPath()
+
+						in let i : Integer = p.transitions->indexOf(tpe_pt)
+
+						in let t : TextualPathExp!Transition = 
+
+							p.transitions->at(i-1)
+
+						in thisModule.resolveTemp(t, 'pe_s')
+
+					endif,
+
+			target <- pe_s
+
+		),
+
+		
+
+		pe_s : PathExp!State (
+
+			incoming <- Set{pe_t}->union(
+
+							if tpe_pt.loopIncoming() then
+
+								Set{thisModule.resolveTemp(tpe_pt.getLoopIncoming(), 'pe_t')}
+
+							else
+
+								Set{}
+
+							endif
+
+						),
+
+			outgoing <- if tpe_pt = thisModule.leafTrans then
+
+							Set{}
+
+						else
+
+							tpe_pt.getOutgoing()
+
+								->collect(e | thisModule.resolveTemp(e, 'pe_t'))
+
+								->union(
+
+								if tpe_pt.loopIncoming() then
+
+									Set{thisModule.resolveTemp(tpe_pt.getLoopIncoming(), 'pe_t')}
+
+								else
+
+									Set{}
+
+								endif
+
+								)
+
+						endif
+
+		)
+
+}
+
+
+
+
+
+rule MultiplePrimitiveTrans {
+
+	from
+
+       tpe_pt : TextualPathExp!PrimitiveTrans (
+
+			thisModule.multiplePrimTransitions->includes(tpe_pt)
+
+       	)
+
+	to 
+
+		pe_t : PathExp!Transition (
+
+			name <- tpe_pt.name,
+
+			source <- 
+
+					if tpe_pt = thisModule.rootTrans then
+
+						thisModule.resolveTemp(thisModule.root, 'pe_s')
+
+					else
+
+						tpe_pt.getLoopTarget()
+
+					endif,
+
+			target <-
+
+					if tpe_pt = thisModule.rootTrans then
+
+						thisModule.resolveTemp(thisModule.root, 'pe_s')
+
+					else
+
+						tpe_pt.getLoopTarget()
+
+					endif
+
+		)
+
+}
+
+
+
+
+
+rule SingleAltTrans1 {
+
+	from
+
+       tpe_pt : TextualPathExp!PrimitiveTrans (
+
+			thisModule.singleAltTransitions1->includes(tpe_pt)
+
+       	)
+
+	to 
+
+		pe_t : PathExp!Transition (
+
+			name <- tpe_pt.name,
+
+			source <-
+
+					thisModule.resolveTemp(
+
+						tpe_pt.getPreviousTransition(),
+
+						'pe_s'
+
+					),
+
+			target <- pe_s
+
+		),
+
+		
+
+		pe_s : PathExp!State (
+
+			incoming <- Set{pe_t}->union(
+
+							if tpe_pt.loopIncoming() then
+
+								Set{thisModule.resolveTemp(tpe_pt.getLoopIncoming(), 'pe_t')}
+
+							else
+
+								Set{}
+
+							endif
+
+						),
+
+			outgoing <- tpe_pt.getOutgoing()
+
+							->collect(e | thisModule.resolveTemp(e, 'pe_t'))
+
+							->union(
+
+							if tpe_pt.loopIncoming() then
+
+								Set{thisModule.resolveTemp(tpe_pt.getLoopIncoming(), 'pe_t')}
+
+							else
+
+								Set{}
+
+							endif
+
+							)
+
+		)
+
+}
+
+
+
+
+
+rule MultipleAltTrans1 {
+
+	from
+
+       tpe_pt : TextualPathExp!PrimitiveTrans (
+
+			thisModule.multipleAltTransitions1->includes(tpe_pt)
+
+       	)
+
+	to 
+
+		pe_t : PathExp!Transition (
+
+			name <- tpe_pt.name,
+
+			source <- thisModule.resolveTemp(tpe_pt.getLoopTarget(), 'pe_s'),
+
+			target <- thisModule.resolveTemp(tpe_pt.getLoopTarget(), 'pe_s')
+
+		)
+
+}
+
+
+
+
+
+rule AltTrans2 {
+
+	from
+
+       tpe_pt : TextualPathExp!PrimitiveTrans (
+
+			thisModule.altTransitions2->includes(tpe_pt)
+
+       	)
+
+	to 
+
+		pe_t : PathExp!Transition (
+
+			name <- tpe_pt.name,
+
+			source <- thisModule.resolveTemp(
+
+						tpe_pt.getPreviousTransition(),
+
+						'pe_s'),
+
+			target <- thisModule.resolveTemp(
+
+						TextualPathExp!AlternativeTrans.allInstances()
+
+							->select(a | a.altPaths
+
+								->collect(b | b.transitions)
+
+								->flatten()
+
+								->includes(tpe_pt)
+
+							)->asSequence()
+
+							->first(),
+
+						'pe_s')
+
+		)
+
+}
+

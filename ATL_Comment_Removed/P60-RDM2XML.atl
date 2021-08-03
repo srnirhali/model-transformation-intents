@@ -1,0 +1,1216 @@
+
+
+	
+
+module RDM2XML; 
+create OUT : XML from IN : RDM;
+
+
+
+uses strings;
+
+
+
+
+
+helper context RDM!Property def: elementsForProperty : Sequence (RDM!Restriction) = 
+
+	RDM!Restriction.allInstancesFrom('IN')->asSequence()->select(c | c.onProperty->includes(self))->asSequence();
+
+
+
+
+
+rule Ontology {
+
+	from i : RDM!Ontology (
+
+			i.oclIsTypeOf(RDM!Ontology)
+
+		)
+
+	to o : XML!Root (
+
+		children <- Sequence { attr, i.elements},
+
+		name <- 'swrlx:Ontology'
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'swrlx:name',
+
+		value <- 'Ontology'
+
+		)
+
+}
+
+
+
+rule RuleOne {
+
+	from i : RDM!Rule (
+
+		i.oclIsTypeOf(RDM!Rule) and
+
+		RDM!Ontology.allInstancesFrom('IN')->asSequence()->size() = 0
+
+		)
+
+	to o : XML!Root (
+
+		name <- 'ruleml:imp',
+
+		children <- Sequence {owlxns, swrlxns, rulemlns, i.hasAntecedent, i.hasConsequent }
+
+		),
+
+	owlxns : XML!Attribute (
+
+		name <- 'xmlns:owlx',
+
+		value <- 'http://www.w3.org/2003/05/owl-xml'
+
+		),
+
+	swrlxns : XML!Attribute (
+
+		name <- 'xmlns:swrlx',
+
+		value <- 'http://www.w3.org/2003/11/swrlx'
+
+		),
+
+	rulemlns : XML!Attribute (
+
+		name <- 'xmlns:ruleml',
+
+		value <- 'http://www.w3.org/2003/11/ruleml'
+
+		)
+
+}
+
+
+
+rule RuleMoreThanOne {
+
+	from i : RDM!Rule (
+
+		i.oclIsTypeOf(RDM!Rule) and 
+
+		( RDM!Rule.allInstancesFrom('IN')->asSequence()->size() > 1 or
+
+		  RDM!Ontology.allInstancesFrom('IN')->asSequence()->size() > 0 )
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'ruleml:imp',
+
+		children <- Sequence {owlxns, swrlxns, rulemlns, i.hasAntecedent, i.hasConsequent }
+
+		),
+
+	owlxns : XML!Attribute (
+
+		name <- 'xmlns:owlx',
+
+		value <- 'http://www.w3.org/2003/05/owl-xml'
+
+		),
+
+	swrlxns : XML!Attribute (
+
+		name <- 'xmlns:swrlx',
+
+		value <- 'http://www.w3.org/2003/11/swrlx'
+
+		),
+
+	rulemlns : XML!Attribute (
+
+		name <- 'xmlns:ruleml',
+
+		value <- 'http://www.w3.org/2003/11/ruleml'
+
+		)
+
+}
+
+
+
+rule Consequent {
+
+	from i : RDM!Consequent (
+
+			i.oclIsTypeOf(RDM!Consequent)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'ruleml:_head',
+
+				
+				
+		children <- let thisRule : RDM!Rule = RDM!Rule.allInstancesFrom('IN')->asSequence()->select(c | c.hasConsequent = i)->first() in
+
+						i.containsAtom->asSequence()->select(c | thisRule.hasAntecedent.containsAtom->excludes(c))->asSequence()
+
+		)
+
+}
+
+
+
+rule Antecedent {
+
+	from i : RDM!Antecedent (
+
+			i.oclIsTypeOf(RDM!Antecedent)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'ruleml:_body',
+
+		children <- i.containsAtom
+
+		)
+
+}
+
+
+
+
+
+rule IndividualPropertyAtom {
+
+	from i : RDM!Atom (
+
+			i.name = 'IndividualPropertyAtom'
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'swrlx:individualPropertyAtom',
+
+		children <- Sequence { prop, i.terms->select(c | c.oclIsTypeOf(RDM!IndividualVariable))->collect(c | thisModule.IndividualVariable(c)),
+
+									 i.terms->select(c | not c.oclIsTypeOf(RDM!IndividualVariable))
+
+							 }
+
+		),
+
+	prop : XML!Attribute (
+
+		name <- 'swrlx:property',
+
+		value <- i.hasPredicateSymbol.name
+
+		)
+
+}
+
+
+
+rule ClassAtom {
+
+	from i : RDM!Atom (
+
+			i.name = 'ClassAtom'
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'swrlx:classAtom',
+
+		children <- Sequence { if i.hasPredicateSymbol.oclIsTypeOf(RDM!Class) then
+
+									thisModule.Class(i.hasPredicateSymbol)
+
+								else if i.hasPredicateSymbol.oclIsKindOf(RDM!Restriction) then
+
+										i.hasPredicateSymbol.onProperty
+
+	  							     else i.hasPredicateSymbol
+
+							         endif
+
+								endif,
+
+								i.terms->asSequence()->select(c | c.oclIsTypeOf(RDM!IndividualVariable))->collect(e | thisModule.IndividualVariable(e)),
+
+								i.terms->asSequence()->select(c | not c.oclIsTypeOf(RDM!IndividualVariable))
+
+							}
+
+		)
+
+}
+
+
+
+rule DataRangeAtom {
+
+	from i : RDM!Atom (
+
+			i.name = 'DataRangeAtom'
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'swrlx:datarangeAtom',
+
+		children <- Sequence { if i.hasPredicateSymbol.oclIsKindOf(RDM!Restriction) then
+
+									i.hasPredicateSymbol.onProperty
+
+							   else i.hasPredicateSymbol
+
+							   endif,
+
+							   i.terms->asSequence()->select(c | c.oclIsTypeOf(RDM!IndividualVariable))->collect(e | thisModule.IndividualVariable(e)),
+
+							   i.terms->asSequence()->select(c | not c.oclIsTypeOf(RDM!IndividualVariable))
+
+							}
+
+		)
+
+}
+
+
+
+rule DataValuedPropertyAtom {
+
+	from i : RDM!Atom (
+
+			i.name = 'DataValuedPropertyAtom'
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'swrlx:datavaluedPropertyAtom',
+
+		children <- Sequence { prop, i.terms->asSequence()->select(c | c.oclIsTypeOf(RDM!IndividualVariable))->collect(e | thisModule.IndividualVariable(e)),
+
+									 i.terms->asSequence()->select(c | c.oclIsTypeOf(RDM!DataVariable))->collect(e | thisModule.DataVariable(e)),
+
+									 i.terms->asSequence()->select(c | not c.oclIsTypeOf(RDM!IndividualVariable) and not c.oclIsTypeOf(RDM!DataVariable))
+
+							}
+
+		),
+
+	prop : XML!Attribute (
+
+		name <- 'swrlx:property',
+
+		value <- i.hasPredicateSymbol.name
+
+		)
+
+}
+
+
+
+rule SameIndividualAtom {
+
+	from i : RDM!Atom (
+
+			i.name = 'SameIndividualAtom'
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'swrlx:sameIndividualAtom',
+
+		children <- Sequence { i.terms->asSequence()->select(c | c.oclIsTypeOf(RDM!IndividualVariable))->collect(e | thisModule.IndividualVariable(e)),
+
+							   i.terms->asSequence()->select(c | not c.oclIsTypeOf(RDM!IndividualVariable))
+
+							 }
+
+		)
+
+}
+
+
+
+rule DifferentIndividualsAtom {
+
+	from i : RDM!Atom (
+
+			i.name = 'DifferentIndividualAtom'
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'swrlx:differentIndividualsAtom',
+
+		children <- Sequence { i.terms->asSequence()->select(c | c.oclIsTypeOf(RDM!IndividualVariable))->collect(e | thisModule.IndividualVariable(e)),
+
+							   i.terms->asSequence()->select(c | not c.oclIsTypeOf(RDM!IndividualVariable))
+
+							 }
+
+		)
+
+}
+
+
+
+rule BuiltinAtom {
+
+	from i : RDM!Atom (
+
+			i.name = 'BulitinAtom'
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'swrlx:builtinAtom',
+
+		children <- Sequence { attr, 
+
+							   i.terms->asSequence()->select(c | c.oclIsTypeOf(RDM!DataVariable))->collect(e | thisModule.DataVariable(e)),
+
+							   i.terms->asSequence()->select(c | c.oclIsTypeOf(RDM!IndividualVariable))->collect(e | thisModule.IndividualVariable(e)),
+
+							   i.terms->asSequence()->select(c | not c.oclIsTypeOf(RDM!DataVariable) and not c.oclIsTypeOf(RDM!IndividualVariable))
+
+							 }
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'swrlx:builtin',
+
+		value <- i.hasPredicateSymbol.buildInID
+
+		)
+
+}
+
+
+
+lazy rule DataVariable {
+
+	from i : RDM!DataVariable
+
+	to o : XML!Element (
+
+		name <- 'ruleml:var',
+
+		children <- Sequence { txt }
+
+		),
+
+	txt : XML!Text (
+
+		name <- '#text',
+
+		value <- i.name
+
+		)
+
+}
+
+
+
+rule Individual {
+
+	from i : RDM!Individual (
+
+			i.oclIsTypeOf(RDM!Individual)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:Individual',
+
+		children <- Sequence { attr }
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:name',
+
+		value <- i.name
+
+		)
+
+}
+
+
+
+rule DataType {
+
+	from i : RDM!DataRange (
+
+			not	i.datatype.oclIsUndefined()
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:Datatype',
+
+		children <- Sequence { attr }
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:name',
+
+		value <- i.datatype.name
+
+		)
+
+}
+
+
+
+rule DataValue {
+
+	from i : RDM!DataValue (
+
+			i.oclIsTypeOf(RDM!DataValue)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:DataValue',
+
+		children <- Sequence { attr, txt }
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:datatype',
+
+		value <- i.type.name
+
+		),
+
+	txt : XML!Text (
+
+		name <- '#text',
+
+		value <- i.value
+
+		)
+
+}
+
+
+
+rule TypedLiteralOfDataRange {
+
+	from i : RDM!TypedLiteral (
+
+			RDM!DataRange.allInstancesFrom('IN')->asSequence()->collect(c | c.oneOf)->flatten()->includes(i)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:DataValue',
+
+		children <- Sequence { attr, txt }
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:datatype',
+
+		value <- i.theType
+
+		),
+
+	txt : XML!Text (
+
+		name <- '#text',
+
+		value <- i.lexicalForm
+
+		)
+
+}
+
+
+
+rule IntersectionOf {
+
+	from i : RDM!IntersectionClass (
+
+			i.oclIsTypeOf(RDM!IntersectionClass)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:IntersectionOf',
+
+ 		children <- Sequence { i.intersectionOf->asSequence()->select(c | c.oclIsTypeOf(RDM!Class))->collect(c | thisModule.Class(c)),
+
+							   i.intersectionOf->asSequence()->select(c | not c.oclIsTypeOf(RDM!Class) and c.oclIsKindOf(RDM!Restriction))->collect(e | e.onProperty)->flatten(),
+
+							   i.intersectionOf->asSequence()->select(c | not c.oclIsTypeOf(RDM!Class) and not c.oclIsKindOf(RDM!Restriction))
+
+							}
+
+		)
+
+}
+
+
+
+rule UnionOf {
+
+	from i : RDM!UnionClass (
+
+			i.oclIsTypeOf(RDM!UnionClass)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:UnionOf',
+
+ 		children <- Sequence { i.unionOf->asSequence()->select(c | c.oclIsTypeOf(RDM!Class))->collect(c | thisModule.Class(c)),
+
+							   i.unionOf->asSequence()->select(c | not c.oclIsTypeOf(RDM!Class) and c.oclIsKindOf(RDM!Restriction))->collect(e | e.onProperty)->flatten(),
+
+							   i.unionOf->asSequence()->select(c | not c.oclIsTypeOf(RDM!Class) and not c.oclIsKindOf(RDM!Restriction))
+
+							}
+
+		)
+
+}
+
+
+
+rule ComplementOf {
+
+	from i : RDM!ComplementClass (
+
+			i.oclIsTypeOf(RDM!ComplementClass)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:ComplementOf',
+
+ 		children <- Sequence { if i.complementOf.oclIsTypeOf(RDM!Class) then
+
+								thisModule.Class(i.complementOf)
+
+								else
+
+									if i.complementOf.oclIsKindOf(RDM!Restriction) then
+
+										i.complementOf.onProperty
+
+									else
+
+										i.complementOf
+
+									endif
+
+							   endif
+
+ 							 }
+
+		)
+
+}
+
+
+
+rule SomeValuesFromAttrClass {
+
+	from i : RDM!SomeValuesFromRestriction (
+
+			if not i.someValuesFromClass.oclIsUndefined()
+
+				then i.someValuesFromClass.oclIsTypeOf(RDM!Class)
+
+				else false
+
+			endif
+
+		)
+
+	to	someValuesFrom : XML!Element (
+
+		name <- 'owlx:someValuesFrom',
+
+		children <- Sequence { class }
+
+		),
+
+	class : XML!Attribute (
+
+		name <- 'owlx:class',
+
+		value <- i.someValuesFromClass.name
+
+		)
+
+}
+
+
+
+rule SomeValuesFromElemClass {
+
+	from i : RDM!SomeValuesFromRestriction (
+
+			if not i.someValuesFromClass.oclIsUndefined()
+
+				then if not i.someValuesFromClass.oclIsTypeOf(RDM!Class) and  not i.someValuesFromClass.oclIsTypeOf(RDM!UnionClass) then
+
+						true
+
+					else false
+
+					endif
+
+				else false
+
+			endif
+
+		)
+
+	to someValuesFrom : XML!Element (
+
+		name <- 'owlx:someValuesFrom',
+
+		children <- i.someValuesFromClass
+
+		)
+
+}
+
+
+
+
+
+rule SomeValuesFromChild {
+
+	from i : RDM!SomeValuesFromRestriction (
+
+			if not i.someValuesFromClass.oclIsUndefined()
+
+				then i.someValuesFromClass.oclIsTypeOf(RDM!UnionClass)
+
+				else false
+
+			endif
+
+		)
+
+	to someValuesFrom : XML!Element (
+
+		name <- 'owlx:someValuesFrom',
+
+		children <- Sequence { i.someValuesFromClass.unionOf->asSequence()->select(c | c.oclIsTypeOf(RDM!Class))->collect(c | thisModule.Class(c)),
+
+							   i.someValuesFromClass.unionOf->asSequence()->select(c | not c.oclIsTypeOf(RDM!Class))
+
+							 }
+
+		)
+
+}
+
+
+
+rule SomeValuesFromAttrDatatype {
+
+	from i : RDM!SomeValuesFromRestriction (
+
+			if not i.someValuesFromRange.oclIsUndefined()
+
+				then i.someValuesFromRange.oclIsTypeOf(RDM!DataRange)
+
+				else false
+
+			endif
+
+		)
+
+	to someValuesFrom : XML!Element (
+
+		name <- 'owlx:someValuesFrom',
+
+		children <- Sequence { datatype }
+
+		),
+
+	datatype : XML!Attribute (
+
+		name <- 'owlx:datatype',
+
+		value <- i.someValuesFromRange.datatype.name
+
+		)
+
+}
+
+
+
+rule AllValuesFromAttrClass {
+
+	from i : RDM!AllValuesFromRestriction (
+
+			if not i.allValuesFromClass.oclIsUndefined()
+
+				then i.allValuesFromClass.oclIsTypeOf(RDM!Class)
+
+				else false
+
+			endif
+
+		)
+
+	to allValuesFrom : XML!Element (
+
+		name <- 'owlx:allValuesFrom',
+
+		children <- Sequence { class }
+
+		),
+
+	class : XML!Attribute (
+
+		name <- 'owlx:class',
+
+		value <- i.allValuesFromClass.name
+
+		)
+
+}
+
+
+
+rule AllValuesFromAttrDatatype {
+
+	from i : RDM!AllValuesFromRestriction (
+
+			if not i.allValuesFromRange.oclIsUndefined()
+
+				then i.allValuesFromRange.oclIsTypeOf(RDM!DataRange)
+
+				else false
+
+			endif
+
+		)
+
+	to allValuesFrom : XML!Element (
+
+		name <- 'owlx:allValuesFrom',
+
+		children <- Sequence { datatype }
+
+		),
+
+	datatype : XML!Attribute (
+
+		name <- 'owlx:datatype',
+
+		value <- i.allValuesFromRange.datatype.name
+
+		)
+
+}
+
+
+
+rule AllValuesFromElemClass {
+
+	from i : RDM!AllValuesFromRestriction (
+
+			if not i.allValuesFromClass.oclIsUndefined()
+
+				then if not i.allValuesFromClass.oclIsTypeOf(RDM!Class) and not i.someValuesFromClass.oclIsTypeOf(RDM!UnionClass) then
+
+						true
+
+					else false
+
+					endif
+
+				else false
+
+			endif
+
+		)
+
+	to allValuesFrom : XML!Element (
+
+		name <- 'owlx:allValuesFrom',
+
+		children <- i.allValuesFromClass
+
+		)
+
+}
+
+
+
+rule AllValuesFromChild {
+
+	from i : RDM!AllValuesFromRestriction (
+
+			if not i.allValuesFromClass.oclIsUndefined()
+
+				then i.allValuesFromClass.oclIsTypeOf(RDM!UnionClass)
+
+				else false
+
+			endif
+
+		)
+
+	to allValuesFrom : XML!Element (
+
+		name <- 'owlx:allValuesFrom',
+
+		children <- Sequence { i.allValuesFromClass.unionOf->asSequence()->select(c | c.oclIsTypeOf(RDM!Class))->collect(c | thisModule.Class(c)),
+
+							   i.allValuesFromClass.unionOf->asSequence()->select(c | not c.oclIsTypeOf(RDM!Class))
+
+							 }
+
+		)
+
+}
+
+
+
+rule HasValueObject {
+
+	from i : RDM!HasValueRestriction (
+
+			if not i.hasValue.oclIsUndefined() then
+
+				i.hasValue.oclIsTypeOf(RDM!Individual)
+
+			else false
+
+			endif
+
+		)
+
+	to hasValue : XML!Element (
+
+		name <- 'owlx:hasValue',
+
+		children <- Sequence { hattr }
+
+		),
+
+	hattr : XML!Attribute (
+
+		name <- 'owlx:name',
+
+		value <- i.hasValue.name
+
+		)
+
+}
+
+
+
+rule HasValueData {
+
+	from i : RDM!HasValueRestriction (
+
+			if not i.hasLiteralValue.oclIsUndefined() then
+
+				i.hasLiteralValue.oclIsKindOf(RDM!Literal)
+
+			else false
+
+			endif
+
+		)
+
+	to hasValue : XML!Element (
+
+		name <- 'owlx:hasValue',
+
+		children <- Sequence { hattr }
+
+		),
+
+	hattr : XML!Attribute (
+
+		name <- 'owlx:name',
+
+		value <- i.hasLiteralValue.lexicalForm
+
+		)
+
+}
+
+
+
+rule CardinalityRestriction {
+
+	from i : RDM!CardinalityRestriction (
+
+			i.oclIsTypeOf(RDM!CardinalityRestriction)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:cardinality',
+
+		children <- Sequence { attr } 
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:value',
+
+		value <- i.cardinality.lexicalForm
+
+		)
+
+}
+
+
+
+rule MinCardinalityRestriction {
+
+	from i : RDM!MinCardinalityRestriction (
+
+			i.oclIsTypeOf(RDM!MinCardinalityRestriction)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:minCardinality',
+
+		children <- Sequence { attr } 
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:value',
+
+		value <- i.minCardinality.lexicalForm
+
+		)
+
+}
+
+
+
+rule MaxCardinalityRestriction {
+
+	from i : RDM!MaxCardinalityRestriction (
+
+			i.oclIsTypeOf(RDM!MaxCardinalityRestriction)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:maxCardinality',
+
+		children <- Sequence { attr } 
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:value',
+
+		value <- i.maxCardinality.lexicalForm
+
+		)
+
+}
+
+
+
+rule ObjectRestriction {
+
+	from i : RDM!ObjectProperty (
+
+			i.oclIsTypeOf(RDM!ObjectProperty) and
+
+			RDM!Atom.allInstancesFrom('IN')->asSequence()->collect(c | c.hasPredicateSymbol)->flatten()->excludes(i)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:ObjectRestriction',
+
+		children <- Sequence { attr , i.elementsForProperty }
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:property',
+
+		value <- i.name
+
+		)
+
+}
+
+		
+
+rule DataRestriction {
+
+	from i : RDM!DatatypeProperty (
+
+			i.oclIsTypeOf(RDM!DatatypeProperty) and
+
+			RDM!Atom.allInstancesFrom('IN')->asSequence()->collect(c | c.hasPredicateSymbol)->flatten()->excludes(i)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:DataRestriction',
+
+		children <- Sequence { attr , i.elementsForProperty }
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:property',
+
+		value <- i.name
+
+		)
+
+}
+
+
+
+lazy rule Class {
+
+	from i : RDM!Class 
+
+	to o : XML!Element (
+
+		name <- 'owlx:Class',
+
+		children <- Sequence { attr, i.subClassOf->select(c | c.oclIsKindOf(RDM!Restriction))->collect(c | c.onProperty)->flatten(),
+
+									 i.subClassOf->select(c | not c.oclIsKindOf(RDM!Restriction))
+
+					}
+
+		),
+
+	attr : XML!Attribute (
+
+		name <- 'owlx:name', 
+
+		value <- i.name
+
+		)
+
+}
+
+
+
+lazy rule IndividualVariable {
+
+	from i : RDM!IndividualVariable
+
+	to o : XML!Element (
+
+		name <- 'ruleml:var',
+
+		children <- Sequence { txt }
+
+		),
+
+	txt : XML!Text (
+
+		name <- '#text',
+
+		value <- i.name
+
+		)
+
+}
+
+
+
+rule OneOfIndividual {
+
+	from i : RDM!EnumeratedClass (
+
+			i.oclIsTypeOf(RDM!EnumeratedClass)
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:OneOf',
+
+		children <- i.oneOf
+
+		)
+
+}
+
+
+
+rule OneOfDataValue {
+
+	from i : RDM!DataRange (
+
+			i.oneOf->size() > 0
+
+		)
+
+	to o : XML!Element (
+
+		name <- 'owlx:OneOf',
+
+		children <- i.oneOf
+
+		)
+
+}

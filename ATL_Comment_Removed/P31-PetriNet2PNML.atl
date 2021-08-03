@@ -1,0 +1,199 @@
+module PetriNet2PNML;
+
+create OUT : PNML from IN : PetriNet;
+
+
+
+rule PNMLDocument {
+
+	from
+
+		e : PetriNet!PetriNet
+
+	to	
+
+		n : PNML!PNMLDocument
+
+		(
+
+			location <- e.location,
+
+			xmlns <- uri,
+
+			nets <- net			
+
+		),
+
+		uri : PNML!URI
+
+		(
+
+			value <- 'http://www.informatik.hu-berlin.de/top/pnml/ptNetb'
+
+		),
+
+		net : PNML!NetElement
+
+		(
+
+			name <- name,
+
+			location <- e.location,
+
+			id <- e.location,
+
+			type <- type_uri,
+
+			contents <- e.elements.union(e.arcs)
+
+		),
+
+		name : PNML!Name
+
+		(
+
+			labels <- label
+
+		),
+
+		label : PNML!Label
+
+		(
+
+			text <- e.name
+
+		),
+
+		type_uri : PNML!URI
+
+		(
+
+			value <- 'http://www.informatik.hu-berlin.de/top/pntd/ptNetb'
+
+		)
+
+}
+
+
+
+rule Place {
+
+	from
+
+		e : PetriNet!Place
+
+	to
+
+		n : PNML!Place
+
+		(
+
+			name <- name,
+
+			id <- e.name,
+
+			location <- e.location			
+
+		),
+
+		name : PNML!Name
+
+		(
+
+			labels <- label
+
+		),
+
+		label : PNML!Label
+
+		(
+
+			text <- e.name
+
+		)
+
+}
+
+
+
+rule Transition {
+
+	from
+
+		e : PetriNet!Transition
+
+	to
+
+		n : PNML!Transition
+
+		(
+
+			name <- name,
+
+			id <- e.name,
+
+			location <- e.location
+
+		),
+
+		name : PNML!Name
+
+		(
+
+			labels <- label
+
+		),
+
+		label : PNML!Label
+
+		(
+
+			text <- e.name
+
+		)
+
+}
+
+
+
+rule Arc {
+
+	from
+
+		e : PetriNet!Arc
+
+	to
+
+		n : PNML!Arc
+
+		(
+
+			name <- name,
+
+			location <- e.location,
+
+			id <- e.name,
+
+			source <- e."from",
+
+			target <- e."to"
+
+		),
+
+		name : PNML!Name
+
+		(
+
+			labels <- label
+
+		),
+
+		label : PNML!Label
+
+		(
+
+			text <- e.name
+
+		)
+
+}

@@ -1,0 +1,381 @@
+
+
+
+
+module IEEE1471_2_MoDAF; 
+
+create OUT : MoDAF  from IN : IEEE1471 ;
+
+
+
+helper def : rationale : 
+
+	String =
+
+		Sequence{} -> union(IEEE1471!Rationale.allInstances()) -> first().name
+
+		+  ', ' +
+
+		Sequence{} -> union(IEEE1471!Rationale.allInstances()) -> first().content 
+
+	;
+
+
+
+rule IEEE1471Model2MoDAFModel {
+
+	from
+
+		mFrom : IEEE1471!IEEE1471Model
+
+	to
+
+		mTo : MoDAF!MoDAFModel(
+
+			name <- mFrom.name,
+
+			content <- mFrom.content,
+
+			enterprise <- mFrom.system,
+
+			environment <- mFrom.environment,
+
+			operationalMissions <- mFrom.missions,
+
+			architectures <- mFrom.architecture,
+
+			architecturalDescription <- mFrom.architecturalDescription,
+
+			stakeholders <- mFrom.stakeholders,
+
+			architecturalFrameworks <- mFrom.libraryViewpoints -> append(default)
+
+		),
+
+		default : MoDAF!ArchitecturalFramework (
+
+			name <- 'Undefined Architectural Framework',
+
+			ownedMember <- Sequence{} 
+
+				-> union(IEEE1471!Viewpoint.allInstances()) 
+
+				-> select(vp | vp.hasSource.oclIsUndefined())
+
+		)		
+
+}
+
+
+
+rule System2Enterprise {
+
+	from
+
+		eFrom : IEEE1471!System
+
+	to
+
+		eTo : MoDAF!Enterprise(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content,
+
+			fulfills <- eFrom.fulfills,
+
+			inhabits <- eFrom.inhabits
+
+		)		
+
+}
+
+
+
+rule Environment2Environment {
+
+	from
+
+		eFrom : IEEE1471!Environment
+
+	to
+
+		eTo : MoDAF!Environment(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content,
+
+			influences <- eFrom.influences
+
+		)		
+
+}
+
+
+
+rule Mission2OperationalMission {
+
+	from
+
+		eFrom : IEEE1471!Mission
+
+	to
+
+		eTo : MoDAF!OperationalMission(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content		
+
+		)		
+
+}
+
+
+
+rule Architecture2Architecture {
+
+	from
+
+		eFrom : IEEE1471!Architecture
+
+	to
+
+		eTo : MoDAF!Architecture(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content,
+
+			enterprise <- Sequence{}
+
+				->union(IEEE1471!System.allInstances())
+
+				-> first(),
+
+			describedBy <- eFrom.describedBy
+
+		)		
+
+}
+
+
+
+rule AD2AD {
+
+	from
+
+		eFrom : IEEE1471!ArchitecturalDescription
+
+	to
+
+		eTo : MoDAF!ArchitecturalDescription(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content,
+
+			products <- eFrom.organizedBy,
+
+			purpose <- thisModule.rationale,
+
+			viewpoints <- eFrom.selects
+
+		)		
+
+}
+
+
+
+rule Stakeholder2Stakeholder {
+
+	from
+
+		eFrom : IEEE1471!Stakeholder
+
+	to
+
+		eTo : MoDAF!Stakeholder(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content		
+
+		)		
+
+}
+
+
+
+rule Viewpoint2View {
+
+	from
+
+		eFrom : IEEE1471!Viewpoint
+
+	to
+
+		eTo : MoDAF!View(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content,
+
+			viewName <- eFrom.name,
+
+			viewDescription <- eFrom.content,
+
+			framework <-
+
+				if eFrom.hasSource.oclIsUndefined()
+
+				then 'Undefined'
+
+				else eFrom.hasSource.name	
+
+				endif,
+
+			usedToCover <- eFrom.usedToCover,
+
+			definingFramework <- eFrom.hasSource			
+
+		)		
+
+}
+
+
+
+rule View2ArchitecturalProduct {
+
+	from
+
+		eFrom : IEEE1471!View
+
+	to
+
+		eTo : MoDAF!ArchitecturalProduct(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content,
+
+			description <- eFrom.name + ', ' + eFrom.content,
+
+			definingView <- eFrom.conformsTo,
+
+			addresses <- eFrom.conformsTo.usedToCover,
+
+			architecturalElements <- eFrom.consitsOf
+
+		)		
+
+}
+
+
+
+rule Model2Element {
+
+	from
+
+		eFrom : IEEE1471!Model
+
+	to
+
+		eTo : MoDAF!Elements(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content
+
+		)		
+
+}
+
+
+
+rule Concern2Concern {
+
+	from
+
+		eFrom : IEEE1471!Concern
+
+	to
+
+		eTo : MoDAF!Concern(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content		
+
+		)		
+
+}
+
+
+
+rule LibraryViewpoint2ArchitecturalFramework {
+
+	from
+
+		eFrom : IEEE1471!LibraryViewpoint
+
+	to
+
+		eTo : MoDAF!ArchitecturalFramework(
+
+			name <- eFrom.name,
+
+			content <- eFrom.content,
+
+			ownedMember <- Sequence{}
+
+				-> select(e | e.isOCLTypeOf(IEEE1471!Viewpoint))
+
+				-> select(vp | vp.hasSource=eFrom)	
+
+		)		
+
+}
+
+
+
+rule StakeholderHasConcern {
+
+	from
+
+		stakeholder : IEEE1471!Stakeholder,
+
+		concern : IEEE1471!Concern
+
+		(
+
+			stakeholder.has.includes(concern)
+
+			and
+
+			concern.isImportantTo.includes(stakeholder)				
+
+		)
+
+	to
+
+		shhc : MoDAF!StakeholderHasConcern (
+
+			client <- stakeholder,
+
+			supplier <- concern,
+
+			owner <- thisModule.resolveTemp(
+
+					  	Sequence{} -> union(IEEE1471!IEEE1471Model.allInstances()) -> first(),
+
+						'mTo'
+
+					)
+
+			
+		)
+
+}
+

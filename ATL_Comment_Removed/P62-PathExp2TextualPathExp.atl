@@ -1,0 +1,366 @@
+module PathExp2TextualPathExp;
+
+create OUT : TextualPathExp from IN : PathExp;
+
+
+
+
+
+
+
+helper def: rootState : PathExp!State =
+
+	PathExp!State.allInstances()
+
+		->select(s | s.incoming->isEmpty())
+
+		->asSequence()
+
+		->first();
+
+
+
+
+
+helper context PathExp!State def: existLoop() : Boolean =
+
+	self.incoming
+
+		->select(e | e.source = self)
+
+		->notEmpty();
+
+
+
+
+
+helper context PathExp!State def: getLoop() : PathExp!Transition =
+
+	self.incoming
+
+		->select(e | e.source = self)
+
+		->asSequence()
+
+		->first();
+
+
+
+
+
+helper context PathExp!State def: getInT() : Sequence(PathExp!Transition) =
+
+	self.incoming
+
+		->select(e | e.source <> self)
+
+		->asSequence();
+
+
+
+
+
+helper context PathExp!State def: getOutT() : Sequence(PathExp!Transition) =
+
+	self.outgoing
+
+		->select(e | e.target <> self)
+
+		->asSequence();
+
+
+
+	
+
+helper context PathExp!State def: getPrevStates() : Sequence(PathExp!State) =
+
+	self.getInT()->collect(e | e.source);
+
+
+
+
+
+helper context PathExp!State def: getNextStates() : Sequence(PathExp!State) =
+
+	self.getOutT()->collect(e | e.target);
+
+
+
+
+
+helper context PathExp!State
+
+	def: getTransitionsFromState(nested : Boolean) : Sequence(String) =
+
+	let nextStates : Sequence(PathExp!State) = self.getNextStates()
+
+	in let prevStates : Sequence(PathExp!State) = self.getPrevStates()
+
+	in let loop : Sequence(PathExp!Transition) =
+
+		if self.existLoop() then
+
+			self.getLoop()
+
+		else
+
+			Sequence{}
+
+		endif
+
+	in
+
+
+
+	if prevStates->size() > 1 and not nested then
+
+		Sequence{}
+
+	else
+
+		if nextStates->size() > 1 then
+
+			let state : PathExp!State = nextStates->first().findNextState(0)
+
+			in Sequence{
+
+					loop,
+
+					self,
+
+					state.getTransitionsFromState(true)
+
+				}->flatten()
+
+		else
+
+			if nextStates->size() = 1 then
+
+				Sequence{
+
+					loop,
+
+					self.getOutT()->first(),
+
+					nextStates->first().getTransitionsFromState(false)
+
+				}->flatten()
+
+			else
+
+				Sequence{}
+
+			endif
+
+		endif
+
+	endif;
+
+			
+
+		
+
+helper context PathExp!Transition
+
+	def: getTransitionsFromTrans() : Sequence(String) =
+
+	Sequence{self, self.target.getTransitionsFromState(false)}->flatten();
+
+
+
+
+
+helper context PathExp!State def: findNextState(n : Integer) : PathExp!State =
+
+	let prevStates : Sequence(PathExp!State) = self.getPrevStates() in
+
+	let nextStates : Sequence(PathExp!State) = self.getNextStates() in
+
+	if prevStates->size() > 1 and n = 0 then
+
+		self
+
+	else
+
+		if prevStates->size() > 1 then
+
+			if nextStates->size() > 1 then
+
+				nextStates->first().findNextState(n)
+
+			else
+
+				nextStates->first().findNextState(n-1)
+
+			endif
+
+		else
+
+			if nextStates->size() > 1 then
+
+				nextStates->first().findNextState(n+1)
+
+			else
+
+				nextStates->first().findNextState(n)
+
+			endif
+
+		endif
+
+	endif;
+
+
+
+		
+
+
+
+rule Main {
+
+	from
+
+        pe : PathExp!PathExp
+
+	to 
+
+		tpe : TextualPathExp!TextualPathExp (
+
+			path <- p
+
+		),
+
+		
+
+		p : TextualPathExp!Path (
+
+			transitions <- thisModule.rootState.getTransitionsFromState(false)
+
+		)
+
+}
+
+
+
+
+
+rule Loop {
+
+	from
+
+       t : PathExp!Transition (
+
+        	t.source = t.target
+
+       )
+
+	to 
+
+		pt : TextualPathExp!PrimitiveTrans (
+
+			name <- '',
+
+			isMultiple <- true
+
+		)
+
+}
+
+
+
+
+
+rule STransition {
+
+	from
+
+       t : PathExp!Transition (
+
+        	t.source <> t.target and 
+
+        	t.source.getOutT()->size() = 1
+
+       )
+
+	to 
+
+		pt : TextualPathExp!PrimitiveTrans (
+
+			name <- '',
+
+			isMultiple <- false
+
+		)
+
+}
+
+
+
+
+
+rule MTransition {
+
+	from
+
+       t : PathExp!Transition (
+
+        	t.source <> t.target and 
+
+        	t.source.getOutT()->size() > 1
+
+       )
+
+	to 
+
+		pt : TextualPathExp!PrimitiveTrans (
+
+			name <- '',
+
+			isMultiple <- false
+
+		)
+
+}
+
+
+
+
+
+rule State {
+
+	from
+
+        s : PathExp!State (
+
+        	s.getOutT()->size() > 1
+
+        )
+
+	using {
+
+    	transitions2 : Sequence(String) =
+
+    		s.getOutT()->collect(e | e.getTransitionsFromTrans());    	
+
+	}
+
+	to 
+
+		at : TextualPathExp!AlternativeTrans (
+
+			altPaths <- paths,
+
+			isMultiple <- false
+
+		),
+
+		
+
+		paths : distinct TextualPathExp!Path foreach(e in transitions2) (
+
+			transitions <- transitions2
+
+		)
+
+}
+

@@ -1,0 +1,510 @@
+module UML2Amble;
+
+create OUT : Amble from IN : UMLDI;
+
+
+
+
+
+
+
+
+
+helper def : sortedClasses : Sequence(UMLDI!Class) =
+
+	UMLDI!Class.allInstances()
+
+		->select(a | a.oclIsTypeOf(UMLDI!Class))
+
+		->asSequence()
+
+		->sortedBy(b | b.name);
+
+
+
+
+
+helper context UMLDI!Class def : getInstancesNb() : Integer =
+
+	self.taggedValue
+
+		->select(x | x.type.name = 'instances')
+
+		->first().dataValue
+
+		->asSequence()->first().toInteger();
+
+
+
+	
+
+helper context UMLDI!Class def : getMinId() : Integer =
+
+	thisModule.sortedClasses
+
+		->iterate(e; acc : Integer = 0 |
+
+			if thisModule.sortedClasses->indexOf(e)
+
+				< thisModule.sortedClasses->indexOf(self) then
+
+				acc + e.getInstancesNb()
+
+			else
+
+				acc
+
+			endif
+
+		);
+
+
+
+
+
+helper context UMLDI!Class def : getMaxId() : Integer =
+
+	self.getMinId() + self.getInstancesNb() - 1;
+
+
+
+
+
+helper context UMLDI!StateMachine def : getVariables() : Set(UMLDI!Attribute) =
+
+	UMLDI!Attribute.allInstances()
+
+		->select(a | a.owner.oclIsTypeOf(UMLDI!Class) and
+
+					 a.owner.name = self.name
+
+				);
+
+
+
+
+
+helper context UMLDI!Transition	def : getMessage() : UMLDI!Operation =
+
+	let statemachine_name : String = 
+
+		UMLDI!StateMachine.allInstances()
+
+			->select(a | a.transitions->includes(self))
+
+			->first().name in
+
+	let guard_name : String = self.guard.name in
+
+	UMLDI!Operation.allInstances()
+
+		->select(a | a.owner.oclIsTypeOf(UMLDI!AssociationClass))
+
+		->select(b | 'received_' + b.name = guard_name)
+
+		->select(c | c.owner.connection
+
+					->collect(d | d.participant)
+
+					->collect(e | e.name)
+
+					->includes(statemachine_name)
+
+				)
+
+		->first();
+
+
+
+
+
+helper context UMLDI!AssociationClass
+
+	def : getSourceProcess() : UMLDI!StateMachine =
+
+	let source_name : String =
+
+		self.connection
+
+			->select(a | not a.isNavigable)
+
+			->first().participant.name in
+
+	UMLDI!StateMachine.allInstances()
+
+		->select(a | a.name = source_name)->first();
+
+	
+
+
+
+helper context UMLDI!AssociationClass
+
+	def : getTargetProcess() : UMLDI!StateMachine =
+
+	let target_name : String =
+
+		self.connection
+
+			->select(a | a.isNavigable)
+
+			->first().participant.name in
+
+	UMLDI!StateMachine.allInstances()
+
+		->select(a | a.name = target_name)->first();
+
+
+
+
+
+
+
+
+
+
+
+rule Model2Program {
+
+	from
+
+		model: UMLDI!Model
+
+	to
+
+		prg: Amble!Program (
+
+			name <- model.name,
+
+			processes <- UMLDI!StateMachine.allInstances(),
+
+			networks <- UMLDI!AssociationClass.allInstances()
+
+		)
+
+}
+
+
+
+
+
+rule StateMachine2Process {
+
+	from
+
+		statemachine: UMLDI!StateMachine
+
+	using {
+
+		crt_class : UMLDI!Class =
+
+			UMLDI!Class.allInstances()
+
+				->select(a | a.name = statemachine.name)
+
+				->first();
+
+	}
+
+	to
+
+		process: Amble!Process (
+
+			name <- statemachine.name,
+
+			instancesNb <- crt_class.getInstancesNb(),
+
+			minId <- crt_class.getMinId(),
+
+			maxId <- crt_class.getMaxId(),
+
+			states <- statemachine.top.subvertex
+
+						->select(d | d.oclIsKindOf(UMLDI!SimpleState)),
+
+			transitions <- statemachine.transitions,
+
+			initial <- statemachine.top.subvertex
+
+						->select(d | d.oclIsKindOf(UMLDI!Pseudostate)) 
+
+						->collect(o | o.outgoing
+
+								->collect(e | e.effect)).flatten()->first(),
+
+			variables <- statemachine.getVariables(),
+
+			connectedTo <- UMLDI!AssociationClass.allInstances()
+
+							->select(e | e.connection
+
+								->collect(d | d.participant.name)
+
+								->includes(statemachine.name))
+
+		)
+
+}
+
+
+
+
+
+rule Attribute2Variable {
+
+	from
+
+		attribute: UMLDI!Attribute (
+
+			attribute.owner.oclIsTypeOf(UMLDI!Class)
+
+		)
+
+	to
+
+		variable: Amble!Variable (
+
+			name <- attribute.name,
+
+			type <- attribute.type.name,
+
+			initValue <- attribute.initialValue.body
+
+		)
+
+}
+
+
+
+
+
+rule State2State {
+
+	from
+
+		uml_state: UMLDI!SimpleState
+
+	to
+
+		amble_state: Amble!State (
+
+			name <- uml_state.name,
+
+			isInitial <- not uml_state.incoming
+
+							->collect(e | e.source)
+
+							->select(d | d.oclIsKindOf(UMLDI!Pseudostate))
+
+							->isEmpty(),
+
+			incoming <- uml_state.incoming,
+
+			outgoing <- uml_state.outgoing
+
+		)
+
+}
+
+
+
+
+
+rule Transition2Trans {
+
+	from
+
+		uml_trans: UMLDI!Transition(
+
+			uml_trans.name = 'RECEIPT'
+
+		)
+
+	to
+
+		trans: Amble!Trans (
+
+			source <- uml_trans.source,
+
+			target <- uml_trans.target,
+
+			guard <- uml_trans.guard,
+
+			action <- uml_trans.effect,
+
+			waitFor <- uml_trans.getMessage()
+
+		)
+
+}
+
+
+
+
+
+rule Transition2TransAll {
+
+	from
+
+		uml_trans: UMLDI!Transition(
+
+			uml_trans.name = 'RECEIPT_ANY'
+
+		)
+
+	to
+
+		trans: Amble!Transall (
+
+			source <- uml_trans.source,
+
+			target <- uml_trans.target,
+
+			guard <- uml_trans.guard,
+
+			action <- uml_trans.effect,
+
+			waitFor <- uml_trans.getMessage()
+
+		)
+
+}
+
+
+
+
+
+rule Transition2Strans {
+
+	from
+
+		uml_trans: UMLDI!Transition(
+
+			(
+
+				uml_trans.name.oclIsUndefined()
+
+				or uml_trans.name = 'CONDITION'
+
+			)
+
+			and
+
+			uml_trans.source->oclIsKindOf(UMLDI!SimpleState)
+
+		)
+
+	to
+
+		trans: Amble!Strans (
+
+			source <- uml_trans.source,
+
+			target <- uml_trans.target,
+
+			guard <- uml_trans.guard,
+
+			action <- uml_trans.effect 
+
+		)
+
+}
+
+
+
+
+
+rule Guard2Guard {
+
+	from
+
+		uml_guard: UMLDI!Guard
+
+	to
+
+		amble_guard: Amble!Guard (
+
+			name <- uml_guard.name
+
+		)
+
+}
+
+
+
+
+
+rule Effect2Action {
+
+	from
+
+		effect: UMLDI!CallAction
+
+	to
+
+		action: Amble!Action (
+
+			name <- effect.name
+
+		)
+
+}
+
+
+
+
+
+rule Class2Network {
+
+	from
+
+		class: UMLDI!AssociationClass
+
+	to
+
+		net: Amble!Network (
+
+			name <- class.name,
+
+			channels <- new_channel
+
+		),
+
+		new_channel: Amble!Channel (
+
+			name <- class.name,
+
+			messages <- class.feature,
+
+			source <- class.getSourceProcess(),
+
+			target <- class.getTargetProcess()
+
+		)
+
+}
+
+
+
+
+
+rule Operation2Message {
+
+	from
+
+		operation: UMLDI!Operation (
+
+			operation.owner.oclIsTypeOf(UMLDI!AssociationClass)
+
+		)
+
+	to
+
+		message: Amble!Message (
+
+			name <- operation.name
+
+		)
+
+}
+

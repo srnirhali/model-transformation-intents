@@ -1,0 +1,177 @@
+
+
+library MOOD4UML2; 
+
+
+
+
+helper context UML2!Package
+
+def : AIF() : Real =
+
+	if self.PAAN() > 0
+
+		then self.PIAN() / self.PAAN()
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : OIF() : Real =
+
+	if self.PAON() > 0
+
+		then self.PION() / self.PAON()
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : IIF() : Real =
+
+	if self.IILN > 0
+
+		then self.IILN / self.PILN(self)
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : AHF() : Real =
+
+	if self.CN() > 1
+
+		then if self.PDAN() > 0
+
+				then self.definedAttributes->iterate(a; acc : Real = 0|
+
+					acc + 1 - self.APV(a)) / self.PDAN()
+
+				else 0
+
+			endif
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : OHF() : Real =
+
+	if self.CN() > 1
+
+		then if self.PDON() > 0
+
+				then self.definedOperations->iterate(o; acc : Real = 0|
+
+					acc + 1 - self.OPV(o)) / self.PDON()
+
+				else 0
+
+			endif
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : AHEF() : Real =
+
+	let avnSum : Integer =
+
+		self.allAttributes->iterate(a; acc : Integer = 0|
+
+			acc + self.AVN(a)) in
+
+	if avnSum > 0
+
+		then self.allAttributes->iterate(a; acc : Integer = 0|
+
+			acc + a.AUN()) / avnSum
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : OHEF() : Real =
+
+	let ovnSum : Integer =
+
+		self.allOperations->iterate(op; acc : Integer = 0|
+
+			acc + self.OVN(op)) in
+
+	if ovnSum > 0
+
+		then self.allOperations->iterate(op; acc : Integer = 0|
+
+			acc + op.OUN()) / ovnSum
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : BPF() : Real =
+
+	if self.PAON() > 0
+
+		then self.POON() / self.PAON()
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : CCF() : Real =
+
+	if self.CN() > 1
+
+		then (self.ICLN() / (self.CN() * self.CN() - self.CN())).sqrt()
+
+		else 0
+
+	endif;
+
+
+
+helper context UML2!Package
+
+def : ICF() : Real =
+
+	if self.ICLN() > 0
+
+		then self.ICLN() / self.PCLN(self)
+
+		else 0
+
+	endif;
+

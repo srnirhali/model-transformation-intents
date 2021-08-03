@@ -1,0 +1,612 @@
+module XML2SpreadsheetMLSimplified; 
+create OUT : SpreadsheetMLSimplified from IN : XML;
+
+
+
+helper context XML!Element def: getStringAttrValue(attrName : String) : String =
+
+	let eltC : Sequence(XML!Attribute) = 
+
+		self.children->select(a | a.oclIsTypeOf(XML!Attribute) and a.name = attrName)->asSequence()
+
+	in
+
+		if eltC->notEmpty() 
+
+		then
+
+			eltC->first().value
+
+		else
+
+			''
+
+		endif;
+
+
+
+
+
+helper context XML!Element def: getChildrenByName(name : String) : Set(XML!Element) =
+
+	self.children->select(e | e.oclIsTypeOf(XML!Element) and e.name = name);
+
+
+
+
+
+helper context XML!Element def: getOptIntAttrValue(attrName : String) : Integer =
+
+	let val : String = self.getStringAttrValue(attrName)
+
+	in
+
+		if val <> ''
+
+		then
+
+			val.toInteger()
+
+		else
+
+			Integer
+
+		endif;
+
+
+
+
+
+helper context XML!Element def: getOptBoolAttrValue(attrName : String) : Boolean =
+
+	let val : String = self.getStringAttrValue(attrName)
+
+	in
+
+		if val <> ''
+
+		then
+
+			if val = '0'
+
+			then
+
+					false
+
+			else 
+
+					true
+
+			endif
+
+		else
+
+			Boolean
+
+		endif;
+
+
+
+
+
+helper context XML!Element def: getOptRealAttrValue(attrName : String) : Real =
+
+	let val : String = self.getStringAttrValue(attrName)
+
+	in
+
+		if val <> ''
+
+		then
+
+			val.toReal()
+
+		else
+
+			Real
+
+		endif;
+
+
+
+
+
+helper context XML!Element def: getOptStringAttrValue(attrName : String) : String =
+
+	let val : String = self.getStringAttrValue(attrName)
+
+	in
+
+		if val <> ''
+
+		then
+
+			val
+
+		else
+
+			String
+
+		endif;
+
+
+
+
+
+helper context XML!Element def: getStringDataValue() : String =
+
+	let eltC : Sequence(XML!Text) = 
+
+		self.children->select(d | d.oclIsTypeOf(XML!Text))->asSequence()
+
+	in
+
+		if eltC->notEmpty() 
+
+		then
+
+				eltC->iterate(txt; res : String = '' |  
+
+					res.concat(txt.value)
+
+				)
+
+		else
+
+			''
+
+		endif;
+
+
+
+
+
+helper context XML!Element def: getSimpleStringDataValue() : String =
+
+	let eltC : Sequence(XML!Text) = 
+
+		self.children->select(d | d.oclIsTypeOf(XML!Text))->asSequence()
+
+	in
+
+		if eltC->notEmpty() 
+
+		then
+
+			eltC->first().value
+
+		else
+
+			''
+
+		endif;
+
+
+
+
+
+helper context XML!Element def: getNumberDataValue() : Real =
+
+	let val : String = self.getSimpleStringDataValue()
+
+	in
+
+		if val <> ''
+
+		then
+
+			val.toReal()
+
+		else
+
+			0.0
+
+		endif;
+
+
+
+
+
+helper context XML!Element def: getBooleanDataValue() : Boolean =
+
+	let val : String = self.getSimpleStringDataValue()
+
+	in
+
+		if val <> ''
+
+		then
+
+			if val = '0'
+
+			then
+
+				false
+
+			else
+
+				true
+
+			endif
+
+		else
+
+			false
+
+		endif;
+
+
+
+
+
+
+
+rule Workbook {
+
+	from
+
+		rw : XML!Root (
+
+			rw.name = 'Workbook'
+
+		)
+
+	
+
+	to
+
+		wb : SpreadsheetMLSimplified!Workbook (
+
+			wb_worksheets <- Sequence{rw.getChildrenByName('Worksheet')->collect(e | thisModule.resolveTemp(e, 'ws'))}
+
+		)	
+
+}
+
+
+
+
+
+rule Worksheet {
+
+	from
+
+		ew : XML!Element (
+
+			ew.name = 'Worksheet'
+
+		)
+
+	
+
+	to
+
+		ws : SpreadsheetMLSimplified!Worksheet (
+
+			name <- ew.getStringAttrValue('ss:Name'),
+
+			ws_table <- Sequence{ew.getChildrenByName('Table')->first()}->collect(e | thisModule.resolveTemp(e, 'tab'))->first()
+
+		)	
+
+}
+
+
+
+
+
+rule Table {
+
+	from
+
+		et : XML!Element (
+
+			et.name = 'Table'
+
+		)
+
+	
+
+	to
+
+		tab : SpreadsheetMLSimplified!Table (
+
+			t_cols <- Sequence{et.getChildrenByName('Column')->collect(e | thisModule.resolveTemp(e, 'col'))},
+
+			t_rows <- Sequence{et.getChildrenByName('Row')->collect(e | thisModule.resolveTemp(e, 'row'))}
+
+		)	
+
+}
+
+
+
+
+
+rule Column {
+
+	from
+
+		ec : XML!Element (
+
+			ec.name = 'Column'
+
+		)
+
+	
+
+	to
+
+		col : SpreadsheetMLSimplified!Column (
+
+			index <- ec.getOptIntAttrValue('ss:Index'),	
+
+			hidden <- ec.getOptBoolAttrValue('ss:Hidden'),
+
+			span <- ec.getOptIntAttrValue('ss:Span'),
+
+			autoFitWidth <- ec.getOptBoolAttrValue('ss:AutoFitWidth'),
+
+			width <- ec.getOptRealAttrValue('ss:Width')
+
+		)	
+
+}
+
+
+
+
+
+rule Row {
+
+	from
+
+		er : XML!Element (
+
+			er.name = 'Row'
+
+		)
+
+	
+
+	to
+
+		row : SpreadsheetMLSimplified!Row (
+
+			r_cells <- Sequence{er.getChildrenByName('Cell')->collect(e | thisModule.resolveTemp(e, 'cell'))},
+
+			index <- er.getOptIntAttrValue('ss:Index'),	
+
+			hidden <- er.getOptBoolAttrValue('ss:Hidden'),
+
+			span <- er.getOptIntAttrValue('ss:Span'),
+
+			autoFitHeight <- er.getOptBoolAttrValue('ss:AutoFitHeight'),
+
+			height <- er.getOptRealAttrValue('ss:Height')
+
+		)	
+
+}
+
+
+
+
+
+rule Cell {
+
+	from
+
+		ece : XML!Element (
+
+			ece.name = 'Cell'
+
+		)
+
+	
+
+	to
+
+		cell : SpreadsheetMLSimplified!Cell (
+
+			index <- ece.getOptIntAttrValue('ss:Index'),
+
+			arrayRange <- ece.getOptStringAttrValue('ss:ArrayRange'),
+
+			formula <- ece.getOptStringAttrValue('ss:Formula'),
+
+			hRef <- ece.getOptStringAttrValue('ss:Href'),
+
+			mergeAcross <- ece.getOptRealAttrValue('ss:Href'),
+
+			mergeDown <- ece.getOptRealAttrValue('ss:Href')	
+
+		)	
+
+}
+
+
+
+
+
+rule StringData {
+
+	from
+
+		esd : XML!Element (
+
+			esd.name = 'Data' and esd.getStringAttrValue('ss:Type')='String'
+
+		)
+
+	
+
+	to
+
+		sdata : SpreadsheetMLSimplified!Data (
+
+			d_cell <- Sequence{esd.parent}->collect(e | thisModule.resolveTemp(e, 'cell'))->first(),
+
+			value <- sv
+
+		),		
+
+		sv : SpreadsheetMLSimplified!StringValue (
+
+			value <- esd.getStringDataValue()
+
+		)
+
+}
+
+
+
+rule NumberData {
+
+	from
+
+		end : XML!Element (
+
+			end.name = 'Data' and end.getStringAttrValue('ss:Type')='Number'
+
+		)
+
+	
+
+	to
+
+		ndata : SpreadsheetMLSimplified!Data (
+
+			d_cell <- Sequence{end.parent}->collect(e | thisModule.resolveTemp(e, 'cell'))->first(),
+
+			value <- nv
+
+		),		
+
+		nv : SpreadsheetMLSimplified!NumberValue (
+
+			value <- end.getNumberDataValue()
+
+		)
+
+}
+
+
+
+rule BooleanData {
+
+	from
+
+		ebd : XML!Element (
+
+			ebd.name = 'Data' and ebd.getStringAttrValue('ss:Type')='Boolean'
+
+		)
+
+	
+
+	to
+
+		bdata : SpreadsheetMLSimplified!Data (
+
+			d_cell <- Sequence{ebd.parent}->collect(e | thisModule.resolveTemp(e, 'cell'))->first(),
+
+			value <- bv
+
+		),		
+
+		bv : SpreadsheetMLSimplified!BooleanValue (
+
+			value <- ebd.getBooleanDataValue()
+
+		)
+
+}
+
+
+
+rule DateTimeData {
+
+	from
+
+		edtd : XML!Element (
+
+			edtd.name = 'Data' and edtd.getStringAttrValue('ss:Type')='DateTime'
+
+		)
+
+		
+
+	using {
+
+		dateTimeString : String = edtd.getSimpleStringDataValue();
+
+	}
+
+	
+
+	to
+
+		dtdata : SpreadsheetMLSimplified!Data (
+
+			d_cell <- Sequence{edtd.parent}->collect(e | thisModule.resolveTemp(e, 'cell'))->first(),
+
+			value <- dttv
+
+		),		
+
+		dttv : SpreadsheetMLSimplified!DateTimeTypeValue (
+
+			value <- dt
+
+		),
+
+		
+		dt : SpreadsheetMLSimplified!DateTimeType (
+
+			year <-	dateTimeString.substring(1,4).toInteger(),
+
+			month <- dateTimeString.substring(6,7).toInteger(),
+
+			day <- dateTimeString.substring(9,10).toInteger(),
+
+			hour <- dateTimeString.substring(12,13).toInteger(),
+
+			minute <- dateTimeString.substring(15,16).toInteger(),
+
+			second <- dateTimeString.substring(18,19).toInteger()
+
+		)
+
+}
+
+
+
+rule ErrorData {
+
+	from
+
+		eed : XML!Element (
+
+			eed.name = 'Data' and eed.getStringAttrValue('ss:Type')='Error'
+
+		)
+
+	
+
+	to
+
+		edata : SpreadsheetMLSimplified!Data (
+
+			d_cell <- Sequence{eed.parent}->collect(e | thisModule.resolveTemp(e, 'cell'))->first(),
+
+			value <- ev
+
+		),		
+
+		ev : SpreadsheetMLSimplified!ErrorValue ()
+
+}
+
+
+

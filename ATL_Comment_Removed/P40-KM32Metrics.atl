@@ -1,0 +1,390 @@
+module KM32Metrics;
+
+create OUT : Metrics from IN : KM3;
+
+
+
+
+
+helper def: allClasses : Set(KM3!Class) = KM3!Class.allInstances();
+
+
+
+helper def: allReferences : Set(KM3!Reference) = KM3!Reference.allInstances();
+
+
+
+helper def: inheritanceRoots : Set(KM3!Class) =
+
+	thisModule.allClasses
+
+		->select(e | e.supertypes->isEmpty());
+
+
+
+helper context KM3!Class def: attributeNb : Integer =
+
+	self.structuralFeatures
+
+		->select(e | e.oclIsTypeOf(KM3!Attribute))
+
+		->size();
+
+
+
+helper context KM3!Class def: attributeNb2 : Integer =
+
+	self.attributeNb + 
+
+	self.supertypes
+
+		->iterate(e; sum : Integer = 0 |
+
+			sum + e.attributeNb
+
+		);
+
+
+
+helper context KM3!Class def: referenceNb : Integer =
+
+	self.structuralFeatures
+
+		->select(e | e.oclIsTypeOf(KM3!Reference))
+
+		->size();
+
+
+
+helper context KM3!Class def: referenceNb2 : Integer =
+
+	self.referenceNb + 
+
+	self.supertypes
+
+		->iterate(e; sum : Integer = 0 |
+
+			sum + e.referenceNb
+
+		);
+
+
+
+helper context KM3!Class def: getInheritanceLenght() : Integer =
+
+	if self.supertypes->size() = 0
+
+	then
+
+		0
+
+	else
+
+		self.supertypes->iterate(e; max : Integer = 0 |
+
+			if e.getInheritanceLenght() + 1 > max
+
+			then
+
+				e.getInheritanceLenght() + 1
+
+			else
+
+				max
+
+			endif
+
+		)
+
+	endif;
+
+
+
+helper def: getInheritanceMaxDepth() : Integer =
+
+	thisModule.allClasses
+
+		->iterate(e; max : Integer = 0 |
+
+			if e.getInheritanceLenght() > max
+
+			then
+
+				e.getInheritanceLenght()
+
+			else
+
+				max
+
+			endif
+
+		);
+
+
+
+helper def: getInheritanceTreeNb() : Integer =
+
+	thisModule.inheritanceRoots->size();
+
+
+
+helper context KM3!Class def: subTypes : Set(KM3!Class) =
+
+	thisModule.allClasses
+
+		->select(e | e.supertypes->includes(self))
+
+		->asSet();
+
+
+
+helper context KM3!Class def: getTree() : Set(KM3!Class) =
+
+	self.subTypes->iterate(e; tree : Set(KM3!Class) = Set{self} |
+
+		tree->union( e.getTree() )
+
+	);
+
+
+
+helper def: existsHLink(t1 : Set(KM3!Class), t2 : Set(KM3!Class)) : Boolean =
+
+	t1->iterate(e; res : Boolean = false |
+
+		if (e.supertypes->asSet()->intersection(t2)->isEmpty() and
+
+			e.subTypes->asSet()->intersection(t2)->isEmpty())
+
+		then
+
+			res
+
+		else
+
+			true
+
+		endif
+
+	);
+
+
+
+helper def: computeGraphNb(tree_seq : Sequence(Set(KM3!Class))) : Integer =
+
+	if tree_seq->size() = 1
+
+	then
+
+		1
+
+	else
+
+		let first_t : Set(KM3!Class) = tree_seq->first() in
+
+		let new_seq : Sequence(Set(KM3!Class)) =
+
+		tree_seq
+
+			->subSequence(2, tree_seq->size())
+
+			->iterate(e;t_seq : Sequence(Set(KM3!Class)) = Sequence{first_t} |
+
+				if thisModule.existsHLink(first_t, e)
+
+				then
+
+					t_seq
+
+						->subSequence(2, t_seq->size())
+
+						->prepend(t_seq->first()->including(e))
+
+				else
+
+					t_seq.append(e)
+
+				endif
+
+			)
+
+		in
+
+		if new_seq->size() = 1
+
+		then
+
+			1
+
+		else
+
+			thisModule.computeGraphNb(
+
+				new_seq->subSequence(2, new_seq->size())
+
+			) + 1
+
+		endif
+
+	endif;
+
+
+
+helper def: getInheritanceGraphNb() : Integer =
+
+	let tree_seq : Sequence(Set(KM3!Class)) =
+
+		thisModule.inheritanceRoots
+
+			->collect(e | e.getTree())
+
+			->asSequence()
+
+	in thisModule.computeGraphNb(tree_seq);
+
+
+
+
+
+
+
+rule Model {
+
+	from
+
+		i : KM3!Metamodel
+
+	to
+
+		o1 : Metrics!IntegerMetric (
+
+			"context" <- 'Model',
+
+			label <- 'Number of classes',
+
+			data <- thisModule.allClasses->size()
+
+		),
+
+		
+
+		o2 : Metrics!IntegerMetric (
+
+			"context" <- 'Model',
+
+			label <- 'Number of associations',
+
+			data <-
+
+				(thisModule.allReferences
+
+					->select(e | e.opposite = OclUndefined)
+
+					->size())
+
+				+
+
+				((thisModule.allReferences
+
+					->select(e | e.opposite <> OclUndefined)
+
+					->size()) div 2)
+
+		),
+
+		
+
+		o3 : Metrics!IntegerMetric (
+
+			"context" <- 'Model',
+
+			label <- 'Maximal depth of heritance',
+
+			data <- thisModule.getInheritanceMaxDepth()
+
+		),
+
+		
+
+		o4 : Metrics!IntegerMetric (
+
+			"context" <- 'Model',
+
+			label <- 'Number of inheritance trees',
+
+			data <- thisModule.getInheritanceTreeNb()
+
+		),
+
+		
+
+		o5 : Metrics!IntegerMetric (
+
+			"context" <- 'Model',
+
+			label <- 'Number of inheritance graphs',
+
+			data <- thisModule.getInheritanceGraphNb()
+
+		)
+
+}
+
+
+
+rule Class {
+
+	from
+
+		i : KM3!Class
+
+	to
+
+		o1 : Metrics!IntegerMetric (
+
+			"context" <- 'Class ' + i.name,
+
+			label <- 'Number of own attributes',
+
+			data <- i.attributeNb
+
+		),
+
+
+
+		o2 : Metrics!IntegerMetric (
+
+			"context" <- 'Class ' + i.name,
+
+			label <- 'Number of own references',
+
+			data <- i.referenceNb
+
+		),
+
+		
+
+		o3 : Metrics!IntegerMetric (
+
+			"context" <- 'Class ' + i.name,
+
+			label <- 'Total number of attributes',
+
+			data <- i.attributeNb2
+
+		),
+
+
+
+		o4 : Metrics!IntegerMetric (
+
+			"context" <- 'Class ' + i.name,
+
+			label <- 'Total number of references',
+
+			data <- i.referenceNb2
+
+		)
+
+}
+

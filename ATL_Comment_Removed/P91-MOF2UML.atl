@@ -1,0 +1,1030 @@
+module MOF2UML;
+
+create OUT : UML from IN : MOF;
+
+
+
+
+
+uses strings;
+
+
+
+
+
+
+
+helper def: firstClass : MOF!Class =
+
+	MOF!Class.allInstancesFrom('IN')->asSequence()->first();
+
+
+
+helper def: firstClustered : Sequence(MOF!Import) =
+
+	Sequence{
+
+		MOF!Import.allInstancesFrom('IN')
+
+			->select(e | e.isClustered)
+
+			->asSequence()->first()
+
+	};
+
+	
+
+helper def: firstImport : Sequence(MOF!Import) =
+
+	Sequence{
+
+		MOF!Import.allInstancesFrom('IN')
+
+			->select(e | not e.isClustered)
+
+			->asSequence()->first()
+
+	};
+
+	
+
+helper def: firstMetamodel : Sequence(MOF!Package) =
+
+	Sequence{
+
+		MOF!Package.allInstancesFrom('IN')->asSequence()->first()
+
+	};
+
+
+
+helper context MOF!ModelElement def: getOrdering() : UML!OrderingKind = 
+
+	if self.multiplicity.isOrdered
+
+	then
+
+		#ok_ordered
+
+	else
+
+		#ok_unordered
+
+	endif;
+
+
+
+helper context MOF!ModelElement def: getUMLOrdering() : UML!OrderingKind = 
+
+	if self.multiplicity.oclIsUndefined()
+
+	then
+
+		#ok_unordered
+
+	else
+
+		if self.multiplicity.isOrdered.oclIsUndefined()
+
+		then
+
+			#ok_unordered
+
+		else
+
+			self.getOrdering()
+
+		endif
+
+	endif;
+
+
+
+helper context MOF!ModelElement def: getVisibility() : UML!Visibility =
+
+	let v : MOF!Visibility = self.visibility in
+
+	if v = #public_vis
+
+	then
+
+		#vk_public
+
+	else
+
+		if v = #protected_vis
+
+		then
+
+			#vk_protected
+
+		else
+
+			if v = #private_vis
+
+			then
+
+				#vk_protected
+
+			else 
+				#vk_public 	
+
+			endif
+
+		endif
+
+	endif;
+
+
+
+helper context MOF!ModelElement def: getUMLVisibility() : UML!Visibility =
+
+	if self.visibility.oclIsUndefined()
+
+	then
+
+		#vk_public
+
+	else
+
+		self.getVisibility()
+
+	endif;
+
+
+
+helper context MOF!ModelElement def: getChangeability() : UML!ChangeableKind =
+
+	if self.isChangeable
+
+	then
+
+		#ck_changeable
+
+	else
+
+		#ck_frozen
+
+	endif;
+
+
+
+helper context MOF!ModelElement
+
+	def: getUMLChangeability() : UML!ChangeableKind =
+
+	if not self.isChangeable.oclIsUndefined()
+
+	then
+
+		self.getChangeability()
+
+	else
+
+		#ck_changeable
+
+	endif;
+
+
+
+helper context MOF!Feature def: getUMLScope() : UML!ScopeKind = 
+
+	if self.scope = #instance_level
+
+	then
+
+		#sk_instance
+
+	else
+
+		#sk_classifier
+
+	endif;
+
+
+
+
+
+
+
+rule Association {
+
+	from
+
+		ma : MOF!Association
+
+	to
+
+		ua : UML!Association (
+
+			
+			name <- ma.name,
+
+			constraint <- ma.constraints,
+
+		  	namespace <- ma.container,
+
+			visibility <- ma.getUMLVisibility(),
+
+			
+			
+
+			
+			isAbstract <- ma.isAbstract,
+
+			isLeaf <- ma.isLeaf,
+
+			isRoot <- ma.isRoot,
+
+			generalization <- mr
+
+			
+		),
+
+		
+
+		mr : distinct UML!Generalization foreach(e in ma.supertypes) (
+
+			
+			name <- ma.name,
+
+			constraint <- ma.supertypes->collect(e | e.constraints),
+
+		  	namespace <- ma.container,
+
+			visibility <- ma.getUMLVisibility(),
+
+			
+			
+
+			child <- ua,
+
+			parent <- e,
+
+			discriminator <- '',
+
+			powertype <- OclUndefined
+
+		)
+
+}
+
+
+
+rule AssociationEnd {
+
+	from
+
+		ma : MOF!AssociationEnd
+
+	to
+
+		ua : UML!AssociationEnd	(
+
+			
+			name <- ma.name,
+
+			constraint <- ma.constraints,
+
+			
+
+
+			association <- ma.container,
+
+			aggregation <-
+
+				if ma.aggregation = #none
+
+				then
+
+					#ak_none
+
+				else
+
+					if ma.aggregation = #shared
+
+					then
+
+						#ak_aggregate
+
+					else	
+						#ak_composite
+
+					endif
+
+				endif,
+
+			changeability <- ma.getUMLChangeability(),
+
+			ordering <- ma.getUMLOrdering(),
+
+			isNavigable <- ma.isNavigable,
+
+			multiplicity <- um,
+
+			targetScope <- #sk_instance,
+
+			qualifier <- Sequence{},
+
+			specification <- Set{},
+
+			participant <- ma.type
+
+		),
+
+	
+
+		um : UML!Multiplicity (
+
+			range <- Set{ur}
+
+		),
+
+		
+
+		ur : UML!MultiplicityRange (
+
+			lower <- ma.multiplicity.lower,
+
+			upper <- ma.multiplicity.upper,
+
+			multiplicity <- um
+
+		)
+
+}
+
+
+
+rule Parameter {
+
+	from
+
+		mp : MOF!Parameter
+
+	to
+
+		up : UML!Parameter (
+
+			
+			name <- mp.name,
+
+			constraint <- mp.constraints,
+
+			
+			
+
+			kind <-
+
+				if mp.direction = #in_dir
+
+				then
+
+					#pdk_in
+
+				else
+
+					if mp.direction = #inout_dir
+
+					then
+
+						#pdk_inout
+
+					else
+
+						if mp.direction = #out_dir
+
+						then
+
+							#pdk_out
+
+						else 
+							#pdk_return
+
+						endif
+
+					endif
+
+				endif,
+
+			type <- mp.type,
+
+			defaultValue <- OclUndefined
+
+		)
+
+}
+
+
+
+rule Attribute {
+
+	from
+
+		ma : MOF!Attribute
+
+	to
+
+		ua : UML!Attribute (
+
+			
+			name <- ma.name,
+
+			constraint <- ma.constraints,
+
+			visibility <- ma.getUMLVisibility(),
+
+			
+			
+
+			
+			ownerScope <- ma.getUMLScope(),
+
+			owner <- ma.container,
+
+			
+			
+
+			
+			changeability <- ma.getUMLChangeability(),
+
+			multiplicity <- um,
+
+			ordering <- ma.getUMLOrdering(),
+
+			type <- ma.type,
+
+			targetScope <- #sk_instance,
+
+			
+			
+
+			initialValue <- OclUndefined
+
+		),
+
+		
+
+		um : UML!Multiplicity (
+
+			range <- Set{ur}
+
+		),
+
+		
+
+		ur : UML!MultiplicityRange (
+
+			lower <- ma.multiplicity.lower,
+
+			upper <- ma.multiplicity.upper,
+
+			multiplicity <- um
+
+		)
+
+}
+
+
+
+rule FirstClass {
+
+	from
+
+		mc : MOF!Class (
+
+			mc = thisModule.firstClass
+
+		)
+
+	to
+
+		uc : UML!Class (
+
+			
+			name <- mc.name,
+
+			constraint <- mc.constraints,
+
+		  	namespace <- mc.container,
+
+			visibility <- mc.getUMLVisibility(),
+
+			
+			
+
+			
+			isAbstract <- mc.isAbstract,
+
+			isLeaf <- mc.isLeaf,
+
+			isRoot <- mc.isRoot,
+
+			generalization <- mr,
+
+			
+			
+
+			
+			
+			
+
+			
+			feature <- mc.contents,
+
+			powertypeRange <- Set{},
+
+			
+			
+
+			isActive <- false
+
+		),
+
+
+
+		mr : distinct UML!Generalization foreach(e in mc.supertypes) (
+
+			
+			name <- mc.name,
+
+			constraint <- mc.supertypes->collect(e | e.constraints),
+
+		  	namespace <- mc.container,
+
+			visibility <- mc.getUMLVisibility(),
+
+			
+			
+
+			child <- uc,
+
+			parent <- e,
+
+			discriminator <- '',
+
+			powertype <- OclUndefined
+
+		),
+
+		
+
+		mo : UML!Model (
+
+			
+			name <- 'Model'
+			
+
+
+			
+			
+			
+
+			
+			
+			
+
+			
+			
+		),
+
+		
+
+		cl : distinct UML!Stereotype foreach(e in thisModule.firstClustered) (
+
+			
+			name <- 'clustering',
+
+			constraint <- Sequence{ Set{} },
+
+		  	namespace <- mo,
+
+			stereotype <- Sequence{ Set{} },
+
+			
+			
+
+			
+			isAbstract <- false,
+
+			isLeaf <- false,
+
+			isRoot <- false,
+
+			
+			
+
+			stereotypeConstraint <- Sequence{ Set{} },
+
+			definedTag <- Sequence{ Set{} },
+
+			icon <- OclUndefined,
+
+			baseClass <- Sequence{ Set{'Dependency'} }
+
+		),
+
+		
+
+		im : distinct UML!Stereotype foreach(e in thisModule.firstImport) (
+
+			
+			name <- 'import',
+
+			constraint <- Sequence{ Set{} },
+
+		  	namespace <- mo,
+
+			stereotype <- Sequence{ Set{} },
+
+			
+			
+
+			
+			isAbstract <- false,
+
+			isLeaf <- false,
+
+			isRoot <- false,
+
+			
+			
+
+			stereotypeConstraint <- Sequence{ Set{} },
+
+			definedTag <- Sequence{ Set{} },
+
+			icon <- OclUndefined,
+
+			baseClass <- Sequence{ Set{'Dependency'} }
+
+		),
+
+		
+
+		mm : distinct UML!Stereotype foreach(e in thisModule.firstMetamodel) (
+
+			
+			name <- 'metamodel',
+
+			constraint <- Sequence{ Set{} },
+
+		  	namespace <- mo,
+
+			stereotype <- Sequence{ Set{} },
+
+			
+			
+
+			
+			isAbstract <- false,
+
+			isLeaf <- false,
+
+			isRoot <- false,
+
+			
+			
+
+			stereotypeConstraint <- Sequence{ Set{} },
+
+			definedTag <- Sequence{ Set{} },
+
+			icon <- OclUndefined,
+
+			baseClass <- Sequence{ Set{'Package'} }
+
+		)
+
+}
+
+
+
+rule OtherClass {
+
+	from
+
+		mc : MOF!Class (
+
+			mc <> thisModule.firstClass
+
+		)
+
+	to
+
+		uc : UML!Class (
+
+			
+			name <- mc.name,
+
+			constraint <- mc.constraints,
+
+		  	namespace <- mc.container,
+
+			visibility <- mc.getUMLVisibility(),
+
+			
+			
+
+			
+			isAbstract <- mc.isAbstract,
+
+			isLeaf <- mc.isLeaf,
+
+			isRoot <- mc.isRoot,
+
+			generalization <- mr,
+
+			
+			
+
+			
+			
+			
+
+			
+			feature <- mc.contents,
+
+			powertypeRange <- Set{},
+
+			
+			
+
+			isActive <- false
+
+		),
+
+
+
+		mr : distinct UML!Generalization foreach(e in mc.supertypes) (
+
+			
+			name <- mc.name,
+
+			constraint <- mc.supertypes->collect(e | e.constraints),
+
+		  	namespace <- mc.container,
+
+			visibility <- mc.getUMLVisibility(),
+
+			
+			
+
+			child <- uc,
+
+			parent <- e,
+
+			discriminator <- '',
+
+			powertype <- OclUndefined
+
+		)
+
+}
+
+
+
+rule Operation {
+
+	from
+
+		mo : MOF!Operation
+
+	to
+
+		uo : UML!Operation (
+
+			
+			name <- mo.name,
+
+			constraint <- mo.constraints,
+
+			visibility <- mo.getUMLVisibility(),
+
+			
+
+
+			
+			ownerScope <- mo.getUMLScope(),
+
+			owner <- mo.container,
+
+			
+			
+
+			
+			isQuery <- mo.isQuery,
+
+			parameter <- mo.contents,
+
+			
+			
+
+			concurrency <- #cck_guarded,
+
+			isAbstract <- false,
+
+			isLeaf <- false,
+
+			isRoot <- false
+
+		)
+
+}
+
+
+
+rule Constraint {
+
+	from
+
+		mc : MOF!Constraint
+
+	to
+
+		uc : UML!Constraint (
+
+			
+			name <- mc.name,
+
+			constraint <- mc.constraints,
+
+		  	namespace <- mc.container,
+
+			
+			
+
+			constrainedElement <- mc.constrainedElements,
+
+			body <- OclUndefined
+
+		)
+
+}
+
+
+
+rule TaggedValue {
+
+	from
+
+		mt : MOF!Tag
+
+	to
+
+		ut : UML!TaggedValue (
+
+			
+			name <- mt.name,
+
+			constraint <- mt.constraints,
+
+		  	namespace <- mt.container,
+
+			
+
+
+			dataValue <- mt.values,
+
+			type <- mt.tagId,
+
+			modelElement <- mt.elements->asSequence()->first(),
+
+			referenceValue <- Set{}
+
+		)
+
+}
+
+
+
+rule Import {
+
+	from
+
+		mi : MOF!Import
+
+	to
+
+		ud : UML!Dependency (
+
+			
+			name <- mi.name,
+
+			constraint <- mi.constraints,
+
+		  	namespace <- thisModule.resolveTemp(thisModule.firstClass, 'mo'),
+
+			stereotype <-
+
+				Set{
+
+					if mi.isClustered
+
+					then
+
+						thisModule.resolveTemp(thisModule.firstClass, 'cl')
+
+					else
+
+						thisModule.resolveTemp(thisModule.firstClass, 'im')
+
+					endif
+
+				},
+
+			
+			
+
+			client <- Sequence{mi.container},
+
+			supplier <- Sequence{mi.importedNamespace}
+
+		)
+
+}
+
+
+
+rule Package {
+
+	from
+
+		mp : MOF!Package
+
+	to
+
+		up : UML!Package (
+
+			
+			name <- mp.name,
+
+			constraint <- mp.constraints,
+
+		  	namespace <- thisModule.resolveTemp(thisModule.firstClass, 'mo'),
+
+			visibility <- mp.getUMLVisibility(),
+
+			stereotype <-
+
+				Set{thisModule.resolveTemp(thisModule.firstClass, 'mm')},
+
+			
+			
+
+			
+			isAbstract <- mp.isAbstract,
+
+			isLeaf <- mp.isLeaf,
+
+			isRoot <- mp.isRoot,
+
+			generalization <- mr,
+
+			
+			
+
+			
+			
+			
+
+			elementImport <- Set{}
+
+		),
+
+		
+
+		mr : distinct UML!Generalization foreach(e in mp.supertypes) (
+
+			
+			name <- mp.name,
+
+			constraint <- mp.supertypes->collect(e | e.constraints),
+
+		  	namespace <- mp.container,
+
+			visibility <- mp.getUMLVisibility(),
+
+			
+			
+
+			child <- up,
+
+			parent <- e,
+
+			discriminator <- '',
+
+			powertype <- OclUndefined
+
+		)
+
+}
+
+
+
+
+
+
+
+
+

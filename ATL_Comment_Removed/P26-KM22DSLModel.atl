@@ -1,0 +1,379 @@
+module KM22DSLModel;
+
+create OUT : DSLModel  from IN1 : KM2, IN2 : KM3, IN3 : DSL;
+
+
+
+
+
+helper context KM2!ModelElement def: getProperties() : Sequence(KM2!Property) =
+
+let a : Sequence(KM3!Attribute) =
+
+	KM3!Class.allInstances()->select( c | c.name = self.name )
+
+	->collect(p | p.structuralFeatures)->flatten()
+
+	->select( a | a.oclIsTypeOf(KM3!Attribute))->asSequence()
+
+in
+
+	a->iterate(e;acc : Sequence(KM2!Property) = Sequence{} | 
+
+	if 	self.properties->select( p | p.name = e.name )->first().oclIsUndefined()
+
+		then acc
+
+		else acc -> including(self.properties->select( p | p.name = e.name )->first())
+
+	endif);
+
+
+
+helper context KM2!ModelElement def: getPropertyReference() : Sequence(KM2!Property) =
+
+	let a : Sequence(KM3!Reference) =
+
+		KM3!Class.allInstances()->select( c | c.name = self.name )->collect(p | p.structuralFeatures)
+
+		->flatten()->select( a | a.oclIsTypeOf(KM3!Reference) )->select(b | not b.isContainer )->asSequence()
+
+	in
+
+		a->iterate(e;acc : Sequence(KM2!Property) = Sequence{} | 
+
+			if 	self.properties->select( p | p.name = e.name )->first().oclIsUndefined()
+
+				then acc
+
+				else acc -> including(self.properties->select( p | p.name = e.name )->first())
+
+			endif);
+
+
+
+helper context KM2!ModelElement def: getPropertyContainer() : Sequence(KM2!Property) =
+
+	let a : Sequence(KM3!Reference) =
+
+		KM3!Class.allInstances()->select( c | c.name = self.name )->collect(p | p.structuralFeatures)
+
+		->flatten()->select( a | a.oclIsTypeOf(KM3!Reference) )->select(b | b.isContainer )->asSequence()
+
+	in
+
+		a->iterate(e;acc : Sequence(KM2!Property) = Sequence{} | 
+
+			if 	self.properties->select( p | p.name = e.name )->first().oclIsUndefined()
+
+				then acc
+
+				else acc -> including(self.properties->select( p | p.name = e.name )->first())
+
+			endif);
+
+
+
+helper context KM2!Property def: isContainer() : Boolean =
+
+	let a : KM3!Reference =
+
+		KM3!Class.allInstances()->select( c | c.name = self.owner.name )->collect(p | p.structuralFeatures)->flatten()
+
+		->select( a | a.oclIsTypeOf(KM3!Reference))->select( r | r.name = self.name)->first()
+
+	in if a.oclIsUndefined() then false else a.isContainer endif;
+
+
+
+helper context KM2!Property def: isReference() : Boolean =
+
+	let a : KM3!Reference =
+
+		KM3!Class.allInstances()->select( c | c.name = self.owner.name )->collect(p | p.structuralFeatures)->flatten()
+
+		->select( a | a.oclIsTypeOf(KM3!Reference))->select( r | r.name = self.name)->first()
+
+	in if a.oclIsUndefined() then false else not a.isContainer endif;
+
+
+
+helper context KM2!Property def: isAttribute() : Boolean =
+
+	let a : KM3!Reference =
+
+		KM3!Class.allInstances()->select( c | c.name = self.owner.name )->collect(p | p.structuralFeatures)->flatten()
+
+		->select( a | a.oclIsTypeOf(KM3!Attribute))->select( r | r.name = self.name)->first()
+
+	in if a.oclIsUndefined() then false else true endif;
+
+
+
+helper context KM2!Property def: getRefVal() : Sequence(KM2!ModelElementRefVal) = 
+
+	if self.value.oclIsTypeOf(KM2!SetVal) then
+
+		self.value.contents->asSequence()
+
+	else
+
+		self.value->asSequence()
+
+	endif;
+
+
+
+helper context KM2!Property def: getRelationship() : DSL!Relationship =
+
+	let a : DSL!Role =
+
+		DSL!Role.allInstances()->select(e | e.name = self.name )->first()
+
+	in a.relation;
+
+
+
+helper context KM2!Property def: getOpposite() : DSL!Role =
+
+	self.getRelationship().roles->select( e | e.name <> self.name )->first();
+
+
+
+helper def: referenceLinks() : Set(KM2!Property) =
+
+	KM2!Property.allInstances()->select( e | e.isReference() )->asSet().debug('Set of References');
+
+
+
+
+
+rule Model {
+
+	from
+
+		km : KM2!Model
+
+	using {
+
+			allRef : Set(KM2!Property) = thisModule.referenceLinks();
+
+		}
+
+	to
+
+		dm : DSLModel!Model (
+
+			domainModel <- km.metamodel,
+
+			contents <- Sequence{km.contents,mel}
+
+		),
+
+		mel : distinct DSLModel!ModelElementLink foreach ( r in allRef ) (
+
+				type <- r.getRelationship().name
+		)
+
+}
+
+
+
+rule ModelElement {
+
+	from
+
+		kme : KM2!ModelElement
+
+	to
+
+		me : DSLModel!ModelElement (
+
+			type <- kme.name,
+
+			id <- kme.id,
+
+			properties <- kme.getProperties(),
+
+			embeddinglinks <- kme.getPropertyContainer(),
+
+			referencelinks <- kme.getPropertyReference()
+
+		)
+
+}
+
+
+
+rule ReferenceLink {
+
+	from
+
+		kp : KM2!Property (
+
+			kp.isReference()
+
+		)
+
+	to
+
+		e : distinct DSLModel!ReferenceLink foreach (rv in kp.getRefVal()) (
+
+			type <- kp.getRelationship().name,
+
+			roles <- rv
+
+		)
+
+}
+
+
+
+rule Role {
+
+	from
+
+		m : KM2!ModelElementRefVal 
+
+	using {
+
+			powner : KM2!Property = if m.owner.oclIsUndefined()
+
+										then m.set.owner
+
+										else m.owner
+
+									endif;
+
+		}
+
+	to
+
+		r1 : DSLModel!Role (
+
+			name <- powner.getOpposite().name,
+
+			element <- powner.owner
+
+		),
+
+		r2 : DSLModel!Role (			
+
+			name <- powner.name,
+
+			element <- m.element,
+
+			owner <- r1.owner
+
+		)
+
+}
+
+
+
+rule EmbeddingLink {
+
+	from
+
+		kp : KM2!Property (
+
+			kp.isContainer() 
+
+		)
+
+	to
+
+		p : DSLModel!EmbeddingLink (
+
+			name <- kp.getRelationship().name,
+
+			elements <- if kp.value.oclIsTypeOf(KM2!SetVal) 
+
+							then kp.value.contents->asSequence()->flatten()->collect(d | d.element)->asSequence()
+
+							else kp.value.element 
+
+						endif
+
+		)
+
+}
+
+
+
+rule Property {
+
+	from
+
+		kp : KM2!Property(
+
+			kp.isAttribute()
+
+		)
+
+	to
+
+		p : DSLModel!Property (
+
+			name <- kp.name,
+
+			value <- kp.value
+
+		)
+
+}
+
+
+
+rule BooleanValue {
+
+	from
+
+		kb : KM2!BooleanVal
+
+	to
+
+		b : DSLModel!BooleanValue(
+
+			value <- kb.value
+
+		)
+
+}
+
+
+
+rule StringValue {
+
+	from
+
+		ks : KM2!StringVal
+
+	to
+
+		s : DSLModel!StringValue (
+
+			value <- ks.value
+
+		)
+
+}
+
+
+
+rule IntegerValue {
+
+	from
+
+		ki : KM2!IntegerVal
+
+	to
+
+		i : DSLModel!IntegerValue(
+
+			value <- ki.value
+
+		)
+
+}
+

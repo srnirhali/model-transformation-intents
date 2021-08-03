@@ -1,0 +1,213 @@
+
+
+module HTML2XML; 
+create OUT : XML from IN : HTML;
+
+
+
+rule HTML2Root {
+
+	from
+
+		html:HTML!HTML
+
+	to
+
+		root:XML!Root (
+
+			name <- 'HTML',
+
+			children <- html.head,
+
+			children <- html.body
+
+		)
+
+}	
+
+
+
+rule HEAD2Element {
+
+	from
+
+		head:HTML!HEAD
+
+	to
+
+		elmt:XML!Element (
+
+			name <- 'HEAD',
+
+			children <- head.headElements
+
+		)
+
+}	
+
+
+
+rule TITLE2Element {
+
+	from
+
+		title:HTML!TITLE
+
+	to
+
+		elmt:XML!Element (
+
+			name <- 'TITLE',
+
+			children <- value
+
+		),
+
+		value:XML!Text (
+
+			value <- if not title.value.oclIsUndefined() then title.value else '' endif
+
+		)
+
+}	
+
+
+
+rule BODY2Element {
+
+	from
+
+		body:HTML!BODY
+
+	to
+
+		elmt:XML!Element (
+
+			name <- 'BODY',
+
+			children <- body.bodyElements
+
+		)
+
+}	
+
+
+
+rule TABLE2Element {
+
+	from
+
+		table:HTML!TABLE
+
+	to
+
+		elmt:XML!Element (
+
+			name <- 'TABLE',
+
+			children <- thisModule.Attribute('border', if not table.border.oclIsUndefined() then table.border else '0' endif),
+
+			children <- table.trs
+
+		)
+
+}	
+
+
+
+rule TR2Element {
+
+	from
+
+		tr:HTML!TR
+
+	to
+
+		elmt:XML!Element (
+
+			name <- 'TR',
+
+			children <- tr.tds
+
+		)
+
+}	
+
+
+
+rule TH2Element {
+
+	from
+
+		th:HTML!TH
+
+	to
+
+		elmt:XML!Element (
+
+			name <- 'TH',
+
+			children <- value
+
+		),
+
+		value:XML!Text (
+
+			value <- if not th.value.oclIsUndefined() then th.value else '' endif
+
+		)
+
+}	
+
+
+
+rule TD2Element {
+
+	from
+
+		td:HTML!TD (
+
+			not td.oclIsTypeOf(HTML!TH)
+
+		)
+
+	to
+
+		elmt:XML!Element (
+
+			name <- 'TD',
+
+			children <- value
+
+		),
+
+		value:XML!Text (
+
+			value <- if not td.value.oclIsUndefined() then td.value else '' endif
+
+		)
+
+}	
+
+
+
+lazy rule Attribute {
+
+	from
+
+		attrName:String,
+
+		attrValue:String
+
+	to
+
+		attr:XML!Attribute (
+
+			name <- attrName,
+
+			value <- attrValue
+
+		)
+
+}	
+

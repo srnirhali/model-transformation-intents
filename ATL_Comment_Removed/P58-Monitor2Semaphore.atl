@@ -1,0 +1,1468 @@
+module Monitor2Semaphore;
+
+create OUT : Program from IN : Program;
+
+
+
+
+
+
+
+helper def: rootElt : Program!Program =
+
+	Program!Program.allInstances()->asSequence()->first();
+
+
+
+helper def: allCondVariables : Set(Program!VariableDeclaration) =
+
+	Program!VariableDeclaration.allInstances()
+
+		->select(c | c.type.name = 'condition');
+
+
+
+helper def: allMonitors : Set(Program!Monitor) =
+
+	Program!Monitor.allInstances();
+
+
+
+helper def: monitorsDefined : Boolean =
+
+	thisModule.allMonitors->notEmpty();
+
+
+
+helper def: allCondCalls : Set(Program!VariableExp) =
+
+	Program!ProcedureCallExp.allInstances()->collect(e | e.source);
+
+
+
+helper context Program!VariableDeclaration
+
+	def: getTargetStructure() : Program!Structure =
+
+	let v_container : Program!Structure = self.structure in
+
+	if v_container.oclIsKindOf(Program!Monitor) then
+
+		v_container.program
+
+	else
+
+		v_container
+
+	endif;
+
+
+
+helper context Program!VariableDeclaration
+
+	def: getType() : Program!Type =
+
+	if self.type.name = 'integer' then
+
+		thisModule.resolveTemp(thisModule.rootElt, 'integer_type')
+
+	else
+
+		thisModule.resolveTemp(thisModule.rootElt, 'boolean_type')
+
+	endif;
+
+	
+
+helper context Program!VariableDeclaration
+
+	def: isDeclaredInMonitor() : Boolean =
+
+	let v_container : Program!Structure = self.structure in
+
+	if v_container.oclIsKindOf(Program!Monitor) then
+
+		true
+
+	else
+
+		if v_container.oclIsKindOf(Program!Procedure) then
+
+			v_container.container.oclIsKindOf(Program!Monitor)
+
+		else
+
+			false
+
+		endif
+
+	endif;
+
+
+
+helper context Program!Program
+
+	def: getProcedures() : Set(Program!Procedure) =
+
+	self.monitors->collect(e | e.procedures)
+
+		->union(thisModule.allCondVariables
+
+			->collect(e | thisModule.resolveTemp(e, 'cond_wait')))
+
+		->union(thisModule.allCondVariables
+
+			->collect(e | thisModule.resolveTemp(e, 'cond_signal')))
+
+		->union(self.procedures);
+
+
+
+helper context Program!Program
+
+	def: getVariables() : Set(Program!VariableDeclaration) =
+
+	self.variables
+
+		->union(thisModule.allCondVariables
+
+			->collect(e | thisModule.resolveTemp(e, 'condsem')))
+
+		->union(thisModule.allCondVariables
+
+			->collect(e | thisModule.resolveTemp(e, 'count')))
+
+		->union(thisModule.allMonitors
+
+			->collect(e | thisModule.resolveTemp(e, 'mutex')))
+
+		->union(thisModule.allMonitors
+
+			->collect(e | thisModule.resolveTemp(e, 'urgent')))
+
+		->union(thisModule.allMonitors
+
+			->collect(e | thisModule.resolveTemp(e, 'urgentcount')));
+
+
+
+
+
+
+
+
+
+rule MainWithMonitors {
+
+	from
+
+		i : Program!Program (
+
+			thisModule.monitorsDefined
+
+		)
+
+	to
+
+		prg : Program!Program (
+
+			name <- i.name,
+
+			variables <- i.getVariables(),
+
+			procedures <- i.getProcedures(),
+
+			monitors <- Set{}
+
+		),
+
+		
+
+		
+		
+		this_var : Program!VariableDeclaration (
+
+			name <- 'this',
+
+			type <- this_type
+
+		),
+
+		
+		this_type : Program!Type (
+
+			name <- 'program'
+
+		),
+
+
+
+		
+		
+		boolean_type : Program!Type (
+
+			name <- 'boolean'
+
+		),
+
+		integer_type : Program!Type (
+
+			name <- 'integer'
+
+		)
+
+}
+
+
+
+rule MainWithoutMonitors {
+
+	from
+
+		i : Program!Program (
+
+			not thisModule.monitorsDefined
+
+		)
+
+	to
+
+		prg : Program!Program (
+
+			name <- i.name,
+
+			variables <- i.variables,
+
+			procedures <- i.procedures,
+
+			monitors <- Set{}
+
+		)
+
+}
+
+
+
+rule Monitor {
+
+	from
+
+		i : Program!Monitor
+
+	to
+
+		
+		
+		
+		
+		mutex : Program!VariableDeclaration (
+
+			name <- i.name + '_mutex',
+
+			type <- thisModule.resolveTemp(thisModule.rootElt, 'boolean_type'),
+
+			initialValue <- true_value,
+
+			structure <- i.program
+
+		),
+
+		
+
+		
+		
+		
+		
+		urgent : Program!VariableDeclaration (
+
+			name <- i.name + '_urgent',
+
+			type <- thisModule.resolveTemp(thisModule.rootElt, 'boolean_type'),
+
+			initialValue <- false_value,
+
+			structure <- i.program
+
+		),
+
+
+
+		
+		
+		
+		
+		urgentcount : Program!VariableDeclaration (
+
+			name <- i.name + '_urgentcount',
+
+			type <- thisModule.resolveTemp(thisModule.rootElt, 'integer_type'),
+
+			initialValue <- zero_value,
+
+			structure <- i.program
+
+		),
+
+
+
+		
+		
+		true_value : Program!BooleanExp (
+
+			symbol <- true
+
+		),
+
+		false_value : Program!BooleanExp (
+
+			symbol <- false
+
+		),
+
+		zero_value : Program!IntegerExp (
+
+			symbol <- 0
+
+		)
+
+}
+
+
+
+rule Condition {
+
+	from
+
+		condition : Program!VariableDeclaration (
+
+			thisModule.allCondVariables->includes(condition)
+
+		)
+
+	to
+
+		
+		
+		
+		
+		
+		condsem : Program!VariableDeclaration (
+
+			name <- condition.structure.name + '_' + condition.name +'_sem',
+
+			type <- thisModule.resolveTemp(thisModule.rootElt, 'boolean_type'),
+
+			initialValue <- false_value,
+
+			structure <- condition.structure.program
+
+		),
+
+		
+
+		
+		
+		
+		
+		
+		count : Program!VariableDeclaration (
+
+			name <- condition.structure.name + '_' + condition.name + '_count',
+
+			type <- thisModule.resolveTemp(thisModule.rootElt, 'integer_type'),
+
+			initialValue <- zero_value_1,
+
+			structure <- condition.structure.program
+
+		),
+
+
+
+
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		cond_wait : Program!Procedure (
+
+			name <- condition.structure.name + '_' + condition.name + '_wait',
+
+			statements <-
+
+				Sequence{wait_stat1, wait_stat2, wait_stat3, wait_stat4},
+
+			container <- condition.structure.program
+
+		),
+
+		wait_stat1 : Program!AssignmentStat (
+
+			target <- count_exp_1,
+
+			value <- plus
+
+		),
+
+		wait_stat2 : Program!ConditionalStat (
+
+			condition <- urgentcount_test,
+
+			thenStats <- Sequence{then_st},
+
+			elseStats <- Sequence{else_st}
+
+		),
+
+		wait_stat3 : Program!ExpressionStat (
+
+			expression <- third_exp
+
+		),
+
+		wait_stat4 : Program!AssignmentStat (
+
+			target <- count_exp_3,
+
+			value <- less
+
+		),
+
+	
+
+		
+		count_exp_1 : Program!VariableExp (
+
+			declaration <- count
+
+		),
+
+		plus : Program!OperatorCallExp (
+
+			name <- '+',
+
+			source <- count_exp_2,
+
+			right <- one_value_1
+
+		),
+
+		count_exp_2 : Program!VariableExp (
+
+			declaration <- count
+
+		),
+
+		
+		urgentcount_test : Program!OperatorCallExp (
+
+			name <- '>',
+
+			source <- urgentcount_exp_3,
+
+			right <- zero_value_2
+
+		),
+
+		urgentcount_exp_3 : Program!VariableExp (
+
+			declaration <-
+
+				thisModule.resolveTemp(condition.structure, 'urgentcount')
+
+		),
+
+		then_st : Program!ExpressionStat (
+
+			expression <- then_exp
+
+		),
+
+		then_exp : Program!ProcedureCallExp (
+
+			name <- 'v',
+
+			source <-  urgent_exp_1,
+
+			arguments <- Sequence{}
+
+		),
+
+		urgent_exp_1 : Program!VariableExp (
+
+			declaration <-
+
+				thisModule.resolveTemp(condition.structure, 'urgent')
+
+		),
+
+		else_st : Program!ExpressionStat (
+
+			expression <- else_exp
+
+		),
+
+		else_exp : Program!ProcedureCallExp (
+
+			name <- 'v',
+
+			source <- mutex_exp,
+
+			arguments <- Sequence{}
+
+		),
+
+		mutex_exp : Program!VariableExp (
+
+			declaration <- thisModule.resolveTemp(condition.structure, 'mutex')
+
+		),
+
+		
+		third_exp : Program!ProcedureCallExp (
+
+			name <- 'p',
+
+			source <- condsem_exp_1,
+
+			arguments <- Sequence{}
+
+		),
+
+		condsem_exp_1 : Program!VariableExp (
+
+			declaration <- condsem
+
+		),
+
+		
+		count_exp_3 : Program!VariableExp (
+
+			declaration <- count
+
+		),
+
+		less : Program!OperatorCallExp (
+
+			name <- '-',
+
+			source <- count_exp_4,
+
+			right <- one_value_2
+
+		),
+
+		count_exp_4 : Program!VariableExp (
+
+			declaration <- count
+
+		),
+
+
+
+		
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		cond_signal : Program!Procedure (
+
+			name <-
+
+				condition.structure.name + '_' + condition.name + '_signal',
+
+			statements <- Sequence{signal_stat1, signal_stat2, signal_stat3},
+
+			container <- condition.structure.program
+
+		),
+
+		signal_stat1 : Program!AssignmentStat (
+
+			target <-urgentcount_exp_1,
+
+			value <- urgentcount_plus
+
+		),
+
+		signal_stat2 : Program!ConditionalStat (
+
+			condition <- condcount_test,
+
+			thenStats <- Sequence{signal_condsem_stat, wait_urgent_stat}
+
+		),
+
+		signal_stat3 : Program!AssignmentStat (
+
+			target <-urgentcount_exp_2,
+
+			value <- urgentcount_less
+
+		),
+
+
+
+		
+		urgentcount_exp_1 : Program!VariableExp (
+
+			declaration <-
+
+				thisModule.resolveTemp(condition.structure, 'urgentcount')
+
+		),
+
+		urgentcount_plus : Program!OperatorCallExp (
+
+			name <- '+',
+
+			source <- urgentcount_exp_4,
+
+			right <- one_value_3
+
+		),
+
+		urgentcount_exp_4 : Program!VariableExp (
+
+			declaration <-
+
+				thisModule.resolveTemp(condition.structure, 'urgentcount')
+
+		),
+
+		
+		condcount_test : Program!OperatorCallExp (
+
+			name <- '>',
+
+			source <- count_exp_5,
+
+			right <- zero_value_3
+
+		),
+
+		count_exp_5 : Program!VariableExp (
+
+			declaration <- count
+
+		),
+
+		signal_condsem_stat : Program!ExpressionStat (
+
+			expression <- signal_condsem
+
+		),
+
+		signal_condsem : Program!ProcedureCallExp (
+
+			name <- 'v',
+
+			source <- condsem_exp_2,
+
+			arguments <- Sequence{}
+
+		),
+
+		condsem_exp_2 : Program!VariableExp (
+
+			declaration <- condsem
+
+		),
+
+		wait_urgent_stat : Program!ExpressionStat	(
+
+			expression <- wait_urgent
+
+		),
+
+		wait_urgent : Program!ProcedureCallExp (
+
+			name <- 'p',
+
+			source <- urgent_exp_2,
+
+			arguments <- Sequence{}
+
+		),
+
+		urgent_exp_2 : Program!VariableExp (
+
+			declaration <-
+
+				thisModule.resolveTemp(condition.structure, 'urgent')
+
+		),
+
+		
+		urgentcount_exp_2 : Program!VariableExp (
+
+			declaration <-
+
+				thisModule.resolveTemp(condition.structure, 'urgentcount')
+
+		),
+
+		urgentcount_less : Program!OperatorCallExp (
+
+			name <- '-',
+
+			source <- urgentcount_exp_5,
+
+			right <- one_value_4
+
+		),
+
+		urgentcount_exp_5 : Program!VariableExp (
+
+			declaration <-
+
+				thisModule.resolveTemp(condition.structure, 'urgentcount')
+
+		),
+
+
+
+
+
+		
+		
+		false_value : Program!BooleanExp (
+
+			symbol <- false
+
+		),
+
+		one_value_1 : Program!IntegerExp (
+
+			symbol <- 1
+
+		),
+
+		one_value_2 : Program!IntegerExp (
+
+			symbol <- 1
+
+		),
+
+		one_value_3 : Program!IntegerExp (
+
+			symbol <- 1
+
+		),
+
+		one_value_4 : Program!IntegerExp (
+
+			symbol <- 1
+
+		),
+
+		zero_value_1 : Program!IntegerExp (
+
+			symbol <- 0
+
+		),
+
+		zero_value_2 : Program!IntegerExp (
+
+			symbol <- 0
+
+		),
+
+		zero_value_3 : Program!IntegerExp (
+
+			symbol <- 0
+
+		)
+
+}
+
+
+
+rule StandaloneProcedure {
+
+	from
+
+		i : Program!Procedure (
+
+			i.container.oclIsKindOf(Program!Program)
+
+		)
+
+	to
+
+		o : Program!Procedure (
+
+			name <- i.name,
+
+			parameters <- i.parameters,
+
+			variables <- i.variables,
+
+			statements <- i.statements,
+
+			container <- i.container
+
+		)
+
+}
+
+
+
+rule MonitorProcedure {
+
+	from
+
+		i : Program!Procedure (
+
+			i.container.oclIsKindOf(Program!Monitor)
+
+		)
+
+	to
+
+		
+		proc : Program!Procedure (
+
+			name <- i.container.name + '_' + i.name,
+
+			parameters <- i.parameters,
+
+			variables <- i.variables,
+
+			statements <- Sequence{in_stat, i.statements, out_stat},
+
+			container <- i.container.program
+
+		),
+
+		
+
+		
+		in_stat : Program!ExpressionStat (
+
+			expression <- in_exp
+
+		),
+
+		in_exp : Program!ProcedureCallExp (
+
+			name <- 'p',
+
+			source <- mutex_exp1,
+
+			arguments <- Sequence{}
+
+		),
+
+		mutex_exp1 : Program!VariableExp (
+
+			declaration <- thisModule.resolveTemp(i.container, 'mutex')
+
+		),
+
+		
+
+		
+		
+		out_stat : Program!ConditionalStat (
+
+			condition <- urgentcount_test,
+
+			thenStats <- Sequence{then_st},
+
+			elseStats <- Sequence{else_st}
+
+		),
+
+		
+		urgentcount_test : Program!OperatorCallExp (
+
+			name <- '>',
+
+			source <- count_exp,
+
+			right <- zero_value
+
+		),
+
+		count_exp : Program!VariableExp (
+
+			declaration <- thisModule.resolveTemp(i.container, 'urgentcount')
+
+		),
+
+		zero_value : Program!IntegerExp (
+
+			symbol <- 0
+
+		),
+
+		
+		then_st : Program!ExpressionStat (
+
+			expression <- then_exp
+
+		),
+
+		then_exp : Program!ProcedureCallExp (
+
+			name <- 'v',
+
+			source <- urgent_exp,
+
+			arguments <- Sequence{}
+
+		),
+
+		urgent_exp : Program!VariableExp (
+
+			declaration <- thisModule.resolveTemp(i.container, 'urgent')
+
+		),
+
+		
+		else_st : Program!ExpressionStat (
+
+			expression <- else_exp
+
+		),
+
+		else_exp : Program!ProcedureCallExp (
+
+			name <- 'v',
+
+			source <- mutex_exp2,
+
+			arguments <- Sequence{}
+
+		),
+
+		mutex_exp2 : Program!VariableExp (
+
+			declaration <- thisModule.resolveTemp(i.container, 'mutex')
+
+		)
+
+}
+
+
+
+rule Type {
+
+	from
+
+		i : Program!Type (
+
+			i.name <> 'condition' and
+
+			(
+
+				(not thisModule.monitorsDefined) or
+
+				(
+
+					thisModule.monitorsDefined and
+
+					i.name <> 'boolean' and
+
+					i.name <> 'integer'
+
+				)
+
+			)
+
+		)
+
+	to
+
+		o : Program!Type (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+rule BooleanIntegerMonitorVariableDeclaration {
+
+	from
+
+		i : Program!VariableDeclaration (
+
+			i.oclIsTypeOf(Program!VariableDeclaration) and
+
+			i.isDeclaredInMonitor() and
+
+			(
+
+				i.type.name = 'integer' or
+
+				i.type.name = 'boolean'
+
+			)
+
+		)
+
+	to
+
+		o : Program!VariableDeclaration (
+
+			name <- i.structure.name + '_' + i.name,
+
+			type <- i.getType(),
+
+			initialValue <- i.initialValue,
+
+			structure <- i.getTargetStructure()
+
+		)
+
+}
+
+
+
+rule MonitorVariableDeclaration {
+
+	from
+
+		i : Program!VariableDeclaration (
+
+			i.oclIsTypeOf(Program!VariableDeclaration) and
+
+			i.isDeclaredInMonitor() and
+
+			i.type.name <> 'condition' and
+
+			i.type.name <> 'integer' and
+
+			i.type.name <> 'boolean'
+
+		)
+
+	to
+
+		o : Program!VariableDeclaration (
+
+			name <- i.structure.name + '_' + i.name,
+
+			type <- i.type,
+
+			initialValue <- i.initialValue,
+
+			structure <- i.getTargetStructure()
+
+		)
+
+}
+
+
+
+rule BooleanIntegerStandaloneVariableDeclaration {
+
+	from
+
+		i : Program!VariableDeclaration (
+
+			i.oclIsTypeOf(Program!VariableDeclaration) and
+
+			not i.isDeclaredInMonitor() and
+
+			(
+
+				i.type.name = 'integer'
+
+				or
+
+				i.type.name = 'boolean'
+
+			)
+
+		)
+
+	to
+
+		o : Program!VariableDeclaration (
+
+			name <- i.name,
+
+			type <- i.getType(),
+
+			initialValue <- i.initialValue,
+
+			structure <- i.structure
+
+		)
+
+}
+
+
+
+rule StandaloneVariableDeclaration {
+
+	from
+
+		i : Program!VariableDeclaration (
+
+			i.oclIsTypeOf(Program!VariableDeclaration) and
+
+			not i.isDeclaredInMonitor() and
+
+			i.type.name <> 'condition' and
+
+			i.type.name <> 'integer' and
+
+			i.type.name <> 'boolean'
+
+		)
+
+	to
+
+		o : Program!VariableDeclaration (
+
+			name <- i.name,
+
+			type <- i.type,
+
+			initialValue <- i.initialValue,
+
+			structure <- i.structure
+
+		)
+
+}
+
+
+
+rule BooleanIntegerMonitorParameter {
+
+	from
+
+		i : Program!Parameter (
+
+			thisModule.monitorsDefined and
+
+			(
+
+			 	i.type.name = 'integer' or
+
+			 	i.type.name = 'boolean'
+
+			)
+
+		)
+
+	to
+
+		o : Program!Parameter (
+
+			name <- i.name,
+
+			type <- i.getType(),
+
+			initialValue <- i.initialValue,
+
+			direction <- i.direction,
+
+			procedure <- i.procedure
+
+		)
+
+}
+
+
+
+rule Parameter {
+
+	from
+
+		i : Program!Parameter (
+
+			not thisModule.monitorsDefined or
+
+			(
+
+				thisModule.monitorsDefined and
+
+			 	i.type.name <> 'integer' and
+
+			 	i.type.name <> 'boolean'
+
+			 )
+
+		)
+
+	to
+
+		o : Program!Parameter (
+
+			name <- i.name,
+
+			type <- i.type,
+
+			initialValue <- i.initialValue,
+
+			direction <- i.direction,
+
+			procedure <- i.procedure
+
+		)
+
+}
+
+
+
+rule ExpressionStat {
+
+	from
+
+		i : Program!ExpressionStat
+
+	to
+
+		o : Program!ExpressionStat (
+
+			expression <- i.expression
+
+		)
+
+}
+
+
+
+rule WhileStat {
+
+	from
+
+		i : Program!WhileStat
+
+	to
+
+		o : Program!WhileStat (
+
+			condition <- i.condition,
+
+			doStats <- i.doStats
+
+		)
+
+}
+
+
+
+rule ConditionalStat {
+
+	from
+
+		i : Program!ConditionalStat
+
+	to
+
+		o : Program!ConditionalStat (
+
+			condition <- i.condition,
+
+			thenStats <- i.thenStats,
+
+			elseStats <- i.elseStats
+
+		)
+
+}
+
+
+
+rule AssignmentStat {
+
+	from
+
+		i : Program!AssignmentStat
+
+	to
+
+		o : Program!AssignmentStat (
+
+			target <- i.target,
+
+			value <- i.value
+
+		)
+
+}
+
+
+
+rule OperatorCallExp {
+
+	from
+
+		i : Program!OperatorCallExp
+
+	to
+
+		o : Program!OperatorCallExp (
+
+			right <- i.right,
+
+			source <- i.source,
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+rule AttributeCallExp {
+
+	from
+
+		i : Program!AttributeCallExp
+
+	to
+
+		o : Program!AttributeCallExp (
+
+			source <- i.source,
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+rule ProcedureCallExp {
+
+	from
+
+		i : Program!ProcedureCallExp (
+
+			i.source.declaration.type.name <> 'condition'
+
+		)
+
+	to
+
+		o : Program!ProcedureCallExp (
+
+			arguments <- i.arguments,
+
+			source <- i.source,
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+rule ConditionProcCallExp {
+
+	from
+
+		i : Program!ProcedureCallExp (
+
+			i.source.declaration.type.name = 'condition'
+
+		)
+
+	to
+
+		call_exp : Program!ProcedureCallExp (
+
+			arguments <- i.arguments,
+
+			source <- source_exp,
+
+			name <- i.source.declaration.structure.name + '_'
+
+				+ i.source.declaration.name + '_' + i.name
+
+		),
+
+		source_exp : Program!VariableExp (
+
+			declaration <-
+
+				thisModule.resolveTemp(thisModule.rootElt, 'this_var')
+
+		)
+
+}
+
+
+
+rule VariableExp {
+
+	from
+
+		i : Program!VariableExp (
+
+			thisModule.allCondCalls->excludes(i)
+
+		)
+
+	to
+
+		o : Program!VariableExp (
+
+			declaration <- i.declaration
+
+		)
+
+}
+
+
+
+rule BooleanExp {
+
+	from
+
+		i : Program!BooleanExp
+
+	to
+
+		o : Program!BooleanExp (
+
+			symbol <- i.symbol
+
+		)
+
+}
+
+
+
+rule IntegerExp {
+
+	from
+
+		i : Program!IntegerExp
+
+	to
+
+		o : Program!IntegerExp (
+
+			symbol <- i.symbol
+
+		)
+
+}
+

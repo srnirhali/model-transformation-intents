@@ -1,0 +1,43 @@
+library KM2Tools; 
+
+
+
+
+helper context KM2!ModelElement def: getStringProperty(name : String) : String =
+
+	self.properties->select( p | p.name = name)->collect( d | d.value)->first().value;
+
+
+
+helper context KM2!ModelElement def: getIntegerProperty(name : String) : Integer =
+
+	self.properties->select( p | p.name = name)->collect( d | d.value)->first().value;
+
+
+
+helper context KM2!ModelElement def: getBooleanProperty(name : String) : Boolean =
+
+	self.properties->select( p | p.name = name)->collect( d | d.value)->first().value;
+
+
+
+helper context KM2!ModelElement def: get(name : String) : KM2!ModelElement =
+
+	self.properties->select(p | p.name = name)->first().value.element;
+
+
+
+helper context KM2!ModelElement def: getRefSet(name : String) : Sequence(KM2!ModelElement) =
+
+	self.properties->select(p | p.name = name)->first().value.contents
+
+	->select( e | e.oclIsTypeOf(KM2!ModelElementRefVal) )->collect( d | d.element )->asSequence();
+
+
+
+helper context KM2!ModelElement def: getSet(name : String) : Sequence(KM2!ModelElement) =
+
+	self.properties->select(p | p.name = name)->first().value.contents
+
+	->select( e | e.oclIsTypeOf(KM2!ModelElementVal) )->collect( d | d.element )->asSequence();
+

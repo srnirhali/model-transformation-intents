@@ -1,0 +1,313 @@
+
+
+
+
+
+
+
+
+module SimpleSBVR2SimpleUML; 
+create  OUT : SimpleUML from IN : SimpleSBVR;
+
+
+
+	
+
+
+
+rule ObjectType2Class {
+
+	
+
+	from
+
+		s : SimpleSBVR!ObjectType
+
+	to
+
+		t : SimpleUML!Class (
+
+		
+
+			name <- s.representations->first().text.value
+
+		)
+
+		
+
+}
+
+
+
+
+
+abstract rule DataType2DataType {
+
+	
+
+	from
+
+		s : SimpleSBVR!DataType
+
+	to
+
+		t : SimpleUML!DataType (
+
+		
+
+		)
+
+}
+
+
+
+
+
+rule NonNegativeInteger2PrimitiveType extends DataType2DataType {
+
+	
+
+	from
+
+		s : SimpleSBVR!NonNegativeInteger
+
+	to
+
+		t : SimpleUML!PrimitiveType (
+
+		
+
+			name <- 'Integer'
+
+		)
+
+}
+
+
+
+rule NonEmptyString2PrimitiveType extends DataType2DataType {
+
+	
+
+	from
+
+		s : SimpleSBVR!NonEmptyString
+
+	to
+
+		t : SimpleUML!PrimitiveType (
+
+		
+
+			name <- 'String'
+
+		)
+
+}
+
+
+
+
+
+
+
+rule AssociativeFactType2Association  {
+
+	
+
+	from
+
+		s : SimpleSBVR!AssociativeFactType
+
+	to
+
+		t : SimpleUML!Association (
+
+			
+
+			name <- s.representations->first().text.value,
+
+			memberEnd <- Set{property1,property2}
+
+		),
+
+		property1 : SimpleUML!Property (
+
+			
+
+			name <- s.role1.nounConcept.representations->first().text.value,
+
+			type <- s.role1.nounConcept,
+
+			association <- t,
+
+			lowerValue <- s.getLowerValueForAssociativeFactType(s.role1),
+
+			upperValue <- s.getUpperValueForAssociativeFactType(s.role1),
+
+			classifier <- s.role2.nounConcept
+
+		),
+
+		property2 : SimpleUML!Property (
+
+			
+
+			name <- s.role2.nounConcept.representations->first().text.value,
+
+			type <- s.role2.nounConcept,
+
+			association <- t,
+
+			lowerValue <- s.getLowerValueForAssociativeFactType(s.role2),
+
+			upperValue <- s.getUpperValueForAssociativeFactType(s.role2),
+
+			classifier <- s.role1.nounConcept
+
+		)
+
+}
+
+
+
+
+
+rule CategorizationFactType2Generalization  {
+
+	
+
+	from
+
+		s : SimpleSBVR!CategorizationFactType
+
+	to
+
+		t : SimpleUML!Generalization (
+
+			
+
+			specific <- s.role1.nounConcept,
+
+			general <- s.role2.nounConcept
+
+		)
+
+}
+
+
+
+
+
+rule IsPropertyOfFactType2Property  {
+
+	
+
+	from
+
+		s : SimpleSBVR!IsPropertyOfFactType
+
+	to
+
+		t : SimpleUML!Property (
+
+			
+
+			classifier <- s.role1.nounConcept,
+
+			type <- s.role2.nounConcept,
+
+			name <- s.role2.nounConcept.representations->first().text.value
+
+		)
+
+}
+
+
+
+rule ObjectificationFactType2InstanceSpecification  {
+
+	
+
+	from
+
+		s : SimpleSBVR!ObjectificationFactType
+
+	to
+
+		t : SimpleUML!InstanceSpecification (
+
+			
+
+			classifier <- s.role2.nounConcept,
+
+			name <- s.role1.nounConcept.representations->first().text.value
+
+		)
+
+}
+
+
+
+
+
+
+
+helper context SimpleSBVR!AssociativeFactType def : getLowerValueForAssociativeFactType(ftr : SimpleSBVR!FactTypeRole) : Integer =
+
+	
+
+	let exact : SimpleSBVR!ExactlyNQuantification = SimpleSBVR!ExactlyNQuantification.allInstancesFrom('IN')->select(
+
+			i | i.scopesOver.isBasedOn = self and i.introducedVariable.rangesOver = ftr.nounConcept
+
+		)->first() in 
+
+	if(not exact.oclIsUndefined()) then exact.cardinality.value
+
+	else
+
+		let least : SimpleSBVR!AtLeastNQuantification = SimpleSBVR!AtLeastNQuantification.allInstancesFrom('IN')->select(
+
+				i | i.scopesOver.isBasedOn = self and i.introducedVariable.rangesOver = ftr.nounConcept
+
+			)->first() in 
+
+		if(not least.oclIsUndefined()) then least.minCardinality.value
+
+		else OclUndefined
+
+		endif
+
+	endif;
+
+
+
+helper context SimpleSBVR!AssociativeFactType def : getUpperValueForAssociativeFactType(ftr : SimpleSBVR!FactTypeRole) : Integer =
+
+	
+
+	let exact : SimpleSBVR!ExactlyNQuantification = SimpleSBVR!ExactlyNQuantification.allInstancesFrom('IN')->select(
+
+		i | i.scopesOver.isBasedOn = self and i.introducedVariable.rangesOver = ftr.nounConcept
+
+	)->first() in 
+
+	if(not exact.oclIsUndefined()) then exact.cardinality.value
+
+	else
+
+		let most : SimpleSBVR!AtMostNQuantification = SimpleSBVR!AtMostNQuantification.allInstancesFrom('IN')->select(
+
+			i | i.scopesOver.isBasedOn = self and i.introducedVariable.rangesOver = ftr.nounConcept
+
+	)->first() in 
+
+		if(not most.oclIsUndefined()) then most.maxCardinality.value
+
+		else OclUndefined
+
+		endif
+
+	endif;
+

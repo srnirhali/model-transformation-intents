@@ -1,0 +1,1174 @@
+
+
+module R2ML2OCL; 
+create OUT : OCL from IN : R2ML;
+
+
+
+uses strings;
+
+
+
+
+
+helper context String def: firstCharToUpper() : String =
+
+	let firstChar : String = self.substring(1, 1) in
+
+		firstChar.toUpper() + self.substring(2, self.size());
+
+
+
+helper context String def: toBoolean() : Boolean =
+
+	if self = 'true'
+
+	then true
+
+	else false
+
+	endif;
+
+
+
+helper context R2ML!Implication def: getChildren : Sequence(R2ML!LogicalFormula) =
+
+	self.getAntecedent->asSequence()->union(self.getConsequent->asSequence());
+
+	
+
+helper context R2ML!Implication def: getAntecedent : Sequence(R2ML!LogicalFormula) 	=
+
+	 if self.antecedent.oclIsTypeOf(R2ML!Conjuction) then
+
+		self.antecedent.formulas
+
+	 else Sequence{self.antecedent}
+
+	 endif;
+
+	
+
+helper context R2ML!Implication def: getConsequent : Sequence(R2ML!LogicalFormula) 	=
+
+	if self.consequent.oclIsTypeOf(R2ML!Conjuction) then
+
+		self.consequent.formulas
+
+	 else Sequence{self.consequent}
+
+	 endif;
+
+
+
+helper def: getChildrenOfAllTopMostImplications() : Sequence(R2ML!LogicalFormula) =
+
+	 let allImps : Sequence(R2ML!Implication) = thisModule.getTopMostUniversallyQuantifiedFormulas()->collect(c | c.formula)->flatten() in
+
+  	 	allImps->collect(c | c.getChildren)->flatten();
+
+	 
+
+helper def: getTopMostUniversallyQuantifiedFormulas() : Sequence(R2ML!UniversallyQuantifiedFormula) =
+
+	R2ML!AlethicIntegrityRule.allInstancesFrom('IN')->asSequence()->collect(c | c.constraint)->flatten();	
+
+
+
+helper def: getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas() : Sequence(R2ML!ObjectVariable) = 
+
+	thisModule.getTopMostUniversallyQuantifiedFormulas()->collect(c | c.variables->asSequence()->first())->flatten()->select(c | c.oclIsTypeOf(R2ML!ObjectVariable))->asSequence();
+
+
+
+
+
+rule RuleBase2OclModule {
+
+	from i : R2ML!RuleBase (
+
+			i.oclIsTypeOf(R2ML!RuleBase)
+
+		)
+
+	to o : OCL!OclModule (
+
+			ownedElements <- i.rules->asSequence()->first().rules
+
+		)
+
+	
+
+}
+
+
+
+rule AlethicIntegrityRule2Invariant {
+
+	from i : R2ML!AlethicIntegrityRule (
+
+			i.oclIsTypeOf(R2ML!AlethicIntegrityRule)
+
+		)
+
+	to o : OCL!Invariant (
+
+			name <- if not i.ruleID.oclIsUndefined() then
+
+						i.ruleID
+
+					else OclUndefined
+
+					endif,
+
+			contextDefinition <- contextDef,
+
+			specification <- if i.constraint.formula.oclIsTypeOf(R2ML!Implication) then
+
+								
+								if i.constraint.formula.getChildren->forAll(c | c.oclIsTypeOf(R2ML!ReferencePropertyAtom)) then
+
+									
+									
+									thisModule.UniversallyQuantifiedFormulaImplication2ForAllIteratorExp(i.constraint)
+
+								else i.constraint.formula
+
+								endif
+
+							else i.constraint.formula
+
+							endif
+
+		),
+
+	  contextDef : OCL!OclContextDefinition (
+
+	  		contextElement <- if not i.constraint.variables->asSequence()->first().classRef.oclIsUndefined() then
+
+								thisModule.Class2Class(i.constraint.variables->asSequence()->first().classRef)
+
+							  else thisModule.ObjectVariable2Class(i.constraint.variables->asSequence()->first())
+
+							  endif
+
+	  	)
+
+}
+
+
+
+unique lazy rule UniversallyQuantifiedFormulaImplication2ForAllIteratorExp {
+
+	from i : R2ML!UniversallyQuantifiedFormula
+
+	to o : OCL!IteratorExp (
+
+			name <- 'forAll',
+
+			source <- opCallExp,
+
+			body <- i.formula,
+
+			iterator <- i.variables->asSequence()->excluding(i.variables->asSequence()->first())->collect(c | thisModule.ObjectVariable2Iterator(c))
+
+		),
+
+	   opCallExp : OCL!OperationCallExp (
+
+	   		name <- 'allInstances',
+
+			source <- varExp
+
+	   	),
+
+	   varExp : OCL!VariableExp (
+
+	   		referredVariable <- var
+
+	   	),
+
+	   var : OCL!Variable (
+
+	   		name <- i.variables->asSequence()->first().classRef.name
+
+	   	)
+
+}
+
+
+
+rule Disjunction2OperatorCallExp {
+
+	from i : R2ML!Disjunction (
+
+			i.oclIsTypeOf(R2ML!Disjunction)
+
+		)
+
+	to o : OCL!OperatorCallExp (
+
+			name <- 'or',
+
+			source <- i.formulas->asSequence()->first(),
+
+			argument <- i.formulas->asSequence()->last()
+
+		)
+
+}
+
+
+
+rule Conjuction2OperatorCallExp {
+
+	from i : R2ML!Conjuction (
+
+			i.oclIsTypeOf(R2ML!Conjuction) and
+
+			
+			
+			i.formulas->select(c | c.oclIsTypeOf(R2ML!ExistentiallyQuantifiedFormula))->size() = 0 and
+
+			i.formulas->select(c | c.oclIsTypeOf(R2ML!UniversallyQuantifiedFormula))->size() = 0 and
+
+			i.formulas->select(c | c.oclIsTypeOf(R2ML!GenericAtom))->size() = 0
+
+		)
+
+	to o : OCL!OperatorCallExp (
+
+			name <- 'and',
+
+			source <- i.formulas->asSequence()->first(),
+
+			argument <- i.formulas->asSequence()->last()
+
+		)
+
+}
+
+
+
+rule Conjuction2IteratorExpSelect {
+
+	from i : R2ML!Conjuction (
+
+			i.oclIsTypeOf(R2ML!Conjuction) and
+
+			i.formulas->select(c | c.oclIsTypeOf(R2ML!ExistentiallyQuantifiedFormula))->size() = 1
+
+			)
+
+	to o : OCL!CollectionOperationCallExp (
+
+			name <- 'notEmpty',
+
+			source <- itExp
+
+		),
+
+	   itExp : OCL!IteratorExp (
+
+	   		name <- 'select',
+
+			source <- i.formulas->select(c | not c.oclIsTypeOf(R2ML!ExistentiallyQuantifiedFormula))->first(),
+
+			
+			
+			body <- i.formulas->select(c | c.oclIsTypeOf(R2ML!ExistentiallyQuantifiedFormula))->first().formula.formulas->select(c | not c.oclIsTypeOf(R2ML!GenericAtom))->first(),
+
+			iterator <- i.formulas->select(c | c.oclIsTypeOf(R2ML!ExistentiallyQuantifiedFormula))->first().variables->collect(c | thisModule.ObjectVariable2Iterator(c))
+
+	   	)
+
+}
+
+
+
+rule Conjuction2IteratorExpForAll {
+
+	from i : R2ML!Conjuction (
+
+			i.oclIsTypeOf(R2ML!Conjuction) and
+
+			i.formulas->select(c | c.oclIsTypeOf(R2ML!UniversallyQuantifiedFormula))->size() = 1
+
+			)
+
+	to o : OCL!IteratorExp (
+
+			name <- 'forAll',
+
+			source <- i.formulas->select(c | not c.oclIsTypeOf(R2ML!UniversallyQuantifiedFormula))->first(),
+
+			body <- i.formulas->select(c | c.oclIsTypeOf(R2ML!UniversallyQuantifiedFormula))->first().formula
+
+		)
+
+}
+
+
+
+rule EqualityAtom2OperatorCallExp {
+
+	from i : R2ML!EqualityAtom (
+
+			i.oclIsTypeOf(R2ML!EqualityAtom) and
+
+			i.terms->select(c | c.oclIsTypeOf(R2ML!ObjectVariable))->size() = 2
+
+		)
+
+	to o : OCL!OperatorCallExp (
+
+			name <- if i.isNegated then
+
+						'<>'
+
+					else '='
+
+					endif,
+
+			source <- if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i.terms->asSequence()->first()) then
+
+						thisModule.ObjectVariable2VariableExp(i.terms->asSequence()->first())
+
+					  else thisModule.ObjectVariable2VariableIteratorExp(i.terms->asSequence()->first())
+
+					  endif,
+
+			argument <- if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i.terms->asSequence()->last()) then
+
+							thisModule.ObjectVariable2VariableExp(i.terms->asSequence()->last())
+
+						else thisModule.ObjectVariable2VariableIteratorExp(i.terms->asSequence()->last())
+
+						endif
+
+		)
+
+}
+
+
+
+rule ReferencePropertyAtom2OperatorCallExp {
+
+	from i : R2ML!ReferencePropertyAtom	(
+
+			i.oclIsTypeOf(R2ML!ReferencePropertyAtom)
+
+		)
+
+	to o : OCL!OperatorCallExp (
+
+			name <- '=',
+
+			source <- prop,
+
+			argument <- if i.object.oclIsTypeOf(R2ML!ObjectVariable) then
+
+							
+							if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i.object) then
+
+								thisModule.ObjectVariable2VariableExp(i.object)
+
+							else thisModule.ObjectVariable2VariableIteratorExp(i.object)
+
+							endif
+
+						else i.object
+
+						endif
+
+		),
+
+	   prop : OCL!PropertyCallExp (
+
+	   		name <- i.referenceProperty.name,
+
+			source <- if i.subject.oclIsTypeOf(R2ML!ObjectVariable) then
+
+							
+							if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i.subject) then
+
+								thisModule.ObjectVariable2VariableExp(i.subject)
+
+							else thisModule.ObjectVariable2VariableIteratorExp(i.subject)
+
+							endif
+
+						else i.subject
+
+						endif
+
+	   	)
+
+}
+
+
+
+rule ReferencePropertyFunctionTerm2VariableExp {
+
+	from i : R2ML!ReferencePropertyFunctionTerm (
+
+			i.oclIsTypeOf(R2ML!ReferencePropertyFunctionTerm) and
+
+			i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable)
+
+		)
+
+	to o : OCL!VariableExp (
+
+			referredVariable <- thisModule.ReferenceProperty2Variable(i.referencePropertyRef)
+
+		)
+
+}
+
+
+
+rule ReferencePropertyFunctionTerm2PropertyCallExp {
+
+	from i : R2ML!ReferencePropertyFunctionTerm (
+
+			i.oclIsTypeOf(R2ML!ReferencePropertyFunctionTerm) and
+
+			not i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable)
+
+		)
+
+	to o : OCL!PropertyCallExp (
+
+			name <- i.referencePropertyRef.name,
+
+			source <- i.contextArgument
+
+		)
+
+}
+
+
+
+rule Implication2OperatorCallExp {
+
+	from i : R2ML!Implication (
+
+			i.oclIsTypeOf(R2ML!Implication) and
+
+			not i.antecedent.oclIsTypeOf(R2ML!GenericAtom)
+
+		)
+
+	to o : OCL!OperatorCallExp (
+
+			name <- 'implies',
+
+			source <- i.antecedent,
+
+			argument <- i.consequent
+
+		)
+
+}
+
+
+
+rule Implication2CollectionOperationCallExpIncludesAll {
+
+	from i : R2ML!Implication (
+
+			i.oclIsTypeOf(R2ML!Implication) and
+
+			i.antecedent.oclIsTypeOf(R2ML!GenericAtom)
+
+		)
+
+	to o : OCL!CollectionOperationCallExp (
+
+			name <- 'includesAll',
+
+			source <- i.antecedent.arguments->select(c | not c.oclIsTypeOf(R2ML!GenericVariable))->first(),
+
+			argument <- i.consequent.arguments->select(c | not c.oclIsTypeOf(R2ML!GenericVariable))->first()
+
+		)
+
+}
+
+
+
+rule ObjectClassificationAtom2OperationCallExp {
+
+	from i : R2ML!ObjectClassificationAtom (
+
+			i.oclIsTypeOf(R2ML!ObjectClassificationAtom)
+
+		)
+
+	to o : OCL!OperationCallExp (
+
+			name <- 'isKindOf',
+
+			source <- if i.term.oclIsTypeOf(R2ML!ObjectVariable) then
+
+					 	if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i.term) then
+
+							thisModule.ObjectVariable2VariableExp(i.term)
+
+						else thisModule.ObjectVariable2VariableIteratorExp(i.term)
+
+						endif
+
+			          else i.term
+
+					  endif,
+
+			argument <- varExpArg
+
+		),
+
+	  varExpArg : OCL!VariableExp (
+
+	  		referredVariable <- thisModule.Class2Variable(i.type)
+
+	  	)
+
+}
+
+
+
+rule AttributionAtom2OperatorCallExp {
+
+	from i : R2ML!AttributionAtom (
+
+			i.oclIsTypeOf(R2ML!AttributionAtom) and
+
+			i.subject.oclIsTypeOf(R2ML!ObjectVariable) and
+
+			i.dataValue.oclIsTypeOf(R2ML!TypedLiteral)
+
+		)	
+
+	to o : OCL!OperatorCallExp (
+
+			name <- '=',
+
+			source <- var,
+
+			argument <- i.dataValue
+
+		),
+
+	   var : OCL!VariableExp (
+
+	   		referredVariable <- thisModule.Attribute2Variable(i.attribute)
+
+	   	)
+
+}
+
+
+
+rule AttributionAtom2PropertyCallExp {
+
+	from i : R2ML!AttributionAtom (
+
+			i.oclIsTypeOf(R2ML!AttributionAtom) and
+
+			i.subject.oclIsTypeOf(R2ML!ObjectVariable) and
+
+			i.dataValue.oclIsTypeOf(R2ML!DataVariable)
+
+			)	
+
+	to o : OCL!PropertyCallExp (
+
+			name <- i.attribute.name,
+
+			source <- if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i.subject) then
+
+							thisModule.ObjectVariable2VariableExp(i.subject)
+
+				      else thisModule.ObjectVariable2VariableIteratorExp(i.subject)
+
+					  endif
+
+		)
+
+}
+
+
+
+unique lazy rule ObjectVariable2Iterator {
+
+	from i : R2ML!ObjectVariable
+
+	to o : OCL!Iterator (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+lazy rule ObjectVariable2VariableIteratorExp {
+
+	from i : R2ML!ObjectVariable
+
+	to o : OCL!VariableExp (
+
+			referredVariable <- thisModule.ObjectVariable2Iterator(i)
+
+		)
+
+}
+
+
+
+unique lazy rule ReferenceProperty2Variable {
+
+	from i : R2ML!ReferenceProperty
+
+	to o : OCL!Variable(
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+unique lazy rule Attribute2Variable {
+
+	from i : R2ML!Attribute
+
+	to o : OCL!Variable (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+lazy rule ObjectVariable2VariableExp {
+
+	from i : R2ML!ObjectVariable
+
+	to o : OCL!VariableExp (
+
+			referredVariable <- thisModule.ObjectVariable2Variable(i)
+
+		)
+
+}
+
+
+
+unique lazy rule ObjectVariable2Variable {
+
+	from i : R2ML!ObjectVariable
+
+	to o : OCL!Variable (
+
+			
+			
+			name <- if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i) then
+
+						'self'
+
+					else i.name
+
+					endif
+
+		)
+
+}
+
+
+
+unique lazy rule ObjectVariable2Class {
+
+	from i : R2ML!ObjectVariable
+
+	to o : OCL!Class (			
+
+			name <- i.name.firstCharToUpper(),
+
+			isAbstract <- false
+
+		)
+
+}
+
+
+
+unique lazy rule Class2Class {
+
+	from i : R2ML!Class
+
+	to o : OCL!Class (			
+
+			name <- i.name,
+
+			isAbstract <- false
+
+		)
+
+}
+
+
+
+unique lazy rule Class2Variable {
+
+	from i : R2ML!Class
+
+	to o : OCL!Variable (
+
+			name <- i.name
+
+		)
+
+}
+
+
+
+rule DatatypePredicateAtom2OperatorCallExp {
+
+	from i : R2ML!DatatypePredicateAtom (
+
+			i.oclIsTypeOf(R2ML!DatatypePredicateAtom) and
+
+			i.dataArguments->select(c | c.oclIsTypeOf(R2ML!AttributeFunctionTerm))->select(c | not c.typeCategory.oclIsUndefined())->size() = 0 or
+
+			i.dataArguments->select(c | c.oclIsTypeOf(R2ML!DataOperationTerm) or c.oclIsTypeOf(R2ML!ObjectOperationTerm))->size() > 0			
+
+		)
+
+	to o : OCL!OperatorCallExp(
+
+			name <- if i.predicate.name = 'swrlb:greaterThanOrEqual' then
+
+						'>='
+
+					else if i.predicate.name = 'swrlb:greaterThan' then
+
+							'>'
+
+						 else if i.predicate.name = 'swrlb:equal' then
+
+								if i.isNegated then
+
+									'<>'
+
+								else '='
+
+								endif
+
+	  						  else if i.predicate.name = 'swrlb:lessThan' then
+
+										'<'
+
+			  					   else if i.predicate.name = 'swrlb:lessThanOrEqual' then
+
+										'<='
+
+				  					    else OclUndefined
+
+									    endif
+
+								   endif
+
+						      endif
+
+						 endif
+
+					endif,
+
+			source <- i.dataArguments->asSequence()->first(),
+
+			argument <- i.dataArguments->asSequence()->last()
+
+		)
+
+}
+
+
+
+rule DatatypePredicateAtomNotNegated2CollectionOperationCallExp {
+
+	from i : R2ML!DatatypePredicateAtom (
+
+			i.oclIsTypeOf(R2ML!DatatypePredicateAtom) and
+
+			i.dataArguments->select(c | c.oclIsTypeOf(R2ML!AttributeFunctionTerm))->select(c | not c.typeCategory.oclIsUndefined())->size() > 0 and
+
+			i.dataArguments->size() = 1 
+
+			and i.isNegated = false
+
+		)
+
+	to o : OCL!CollectionOperationCallExp (
+
+			name <- if i.predicate.name = 'swrlb:empty' then
+
+						'isEmpty'
+
+					else OclUndefined
+
+					endif,
+
+			source <- i.dataArguments->asSequence()->first()
+
+		)
+
+}
+
+
+
+rule DatatypePredicateAtomNegated2OperatorCallExp {
+
+	from i : R2ML!DatatypePredicateAtom (
+
+			i.oclIsTypeOf(R2ML!DatatypePredicateAtom) and
+
+			i.dataArguments->select(c | c.oclIsTypeOf(R2ML!AttributeFunctionTerm))->select(c | not c.typeCategory.oclIsUndefined())->size() > 0 and
+
+			i.dataArguments->size() = 1 
+
+			and i.isNegated = true
+
+		)
+
+	to o : OCL!OperatorCallExp (
+
+			name <- 'not',
+
+			source <- collOpExp
+
+		),
+
+	  collOpExp : OCL!CollectionOperationCallExp (
+
+			name <- if i.predicate.name = 'swrlb:empty' then
+
+						'isEmpty'
+
+					else OclUndefined
+
+					endif,
+
+			source <- i.dataArguments->asSequence()->first()
+
+		)
+
+}
+
+
+
+rule DatatypePredicateAtom2SizeOperatorCallExp {
+
+	from i : R2ML!DatatypePredicateAtom (
+
+			i.oclIsTypeOf(R2ML!DatatypePredicateAtom) and
+
+			i.dataArguments->select(c | c.oclIsTypeOf(R2ML!AttributeFunctionTerm))->select(c | not c.typeCategory.oclIsUndefined())->size() > 0 and
+
+			i.dataArguments->size() = 2 and
+
+			i.predicate.name = 'swrlb:length'
+
+			)
+
+	to o : OCL!OperatorCallExp (
+
+			name <- '=',
+
+			source <- if i.dataArguments->asSequence()->first().oclIsKindOf(R2ML!DataFunctionTerm) then			
+
+						if i.dataArguments->asSequence()->first().typeCategory.oclIsUndefined() then
+
+							i.dataArguments->asSequence()->first()
+
+					  	else if i.dataArguments->asSequence()->first().typeCategory = #bag then
+
+					  			collCallExp
+
+						   	 else OclUndefined
+
+						     endif
+
+					    endif
+
+					  else i.dataArguments->asSequence()->first()
+
+					  endif,
+
+			argument <- if i.dataArguments->asSequence()->last().oclIsKindOf(R2ML!DataFunctionTerm) then			
+
+							if i.dataArguments->asSequence()->last().typeCategory.oclIsUndefined() then
+
+								i.dataArguments->asSequence()->last()
+
+						  	else if i.dataArguments->asSequence()->last().typeCategory = #bag then
+
+						  			collCallExp
+
+							   	 else OclUndefined
+
+							     endif
+
+						    endif
+
+					    else i.dataArguments->asSequence()->last()
+
+					    endif 
+
+		),
+
+		collCallExp : OCL!CollectionOperationCallExp (
+
+				name <- if i.predicate.name = 'swrlb:length' then
+
+							'size'
+
+						else OclUndefined
+
+						endif,
+
+				source <- if i.dataArguments->asSequence()->first().oclIsKindOf(R2ML!DataFunctionTerm) then			
+
+							if not i.dataArguments->asSequence()->first().typeCategory.oclIsUndefined() then
+
+								 if i.dataArguments->asSequence()->first().typeCategory = #bag then
+
+						  			 i.dataArguments->asSequence()->first()
+
+							   	 else i.dataArguments->asSequence()->last()
+
+							     endif
+
+							   else i.dataArguments->asSequence()->last()
+
+						    endif
+
+					     else i.dataArguments->asSequence()->last()
+
+					     endif 
+
+			)
+
+}
+
+
+
+rule DatatypeFunctionTerm2CollectionOperationCallExp {
+
+	from i : R2ML!DatatypeFunctionTerm (
+
+			i.oclIsTypeOf(R2ML!DatatypeFunctionTerm) and
+
+			i.dataArguments->size() = 1
+
+		)
+
+	to o : OCL!CollectionOperationCallExp (
+
+			name <- if i.function.name = 'fn:count' then
+
+						'size'
+
+					else OclUndefined
+
+					endif,
+
+			source <- i.dataArguments->asSequence()->first()
+
+		)
+
+}
+
+
+
+rule ObjectOperationTerm2CollectionOperationCallExp {
+
+	from i : R2ML!ObjectOperationTerm (
+
+			i.oclIsTypeOf(R2ML!ObjectOperationTerm)
+
+		)
+
+	to o : OCL!CollectionOperationCallExp (
+
+			name <- i.operation.name,
+
+			source <- i.contextArgument
+
+		)
+
+}
+
+
+
+rule DataOperationTerm2OperationCallExp {
+
+	from i : R2ML!DataOperationTerm (
+
+			i.oclIsTypeOf(R2ML!DataOperationTerm) and
+
+			i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable)
+
+		)
+
+	to o : OCL!OperationCallExp (
+
+			name <- i.dataOperationRef.name,
+
+			source <- if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i.contextArgument) then
+
+							thisModule.ObjectVariable2VariableExp(i.contextArgument)
+
+					  else thisModule.ObjectVariable2VariableIteratorExp(i.contextArgument)
+
+					  endif
+
+		)
+
+}
+
+
+
+rule AttributeFunctionTerm2PropertyCallExp {
+
+	from i : R2ML!AttributeFunctionTerm (
+
+			i.oclIsTypeOf(R2ML!AttributeFunctionTerm) and
+
+			( not i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable) or
+
+			  R2ML!GenericAtom.allInstancesFrom('IN')->asSequence()->select(c | c.predicate.name = 'swrlb:member')->collect(c | c.arguments)->flatten()->includes(i.contextArgument) or
+
+			  R2ML!UniversallyQuantifiedFormula.allInstancesFrom('IN')->asSequence()->collect(c | c.variables)->flatten()->includes(i.contextArgument)
+
+			 )
+
+		)
+
+	to o : OCL!PropertyCallExp (
+
+			name <- i.attribute.name,
+
+			source <- 	if R2ML!GenericAtom.allInstancesFrom('IN')->asSequence()->select(c | c.predicate.name = 'swrlb:member')->collect(c | c.arguments)->flatten()->includes(i.contextArgument) 
+
+ 						   or 
+
+						   R2ML!UniversallyQuantifiedFormula.allInstancesFrom('IN')->asSequence()->collect(c | c.variables)->flatten()->includes(i.contextArgument) then
+
+							
+
+						   if thisModule.getFirstObjectVariablesOfTopMostUniversallyQuantifiedFormulas()->includes(i.contextArgument) then
+
+								thisModule.ObjectVariable2VariableExp(i.contextArgument)
+
+		 				   else thisModule.ObjectVariable2VariableIteratorExp(i.contextArgument)
+
+					       endif
+
+						else i.contextArgument
+
+						endif
+
+		)
+
+}
+
+
+
+rule AttributeFunctionTerm2VariableExp {
+
+	from i : R2ML!AttributeFunctionTerm (
+
+			i.oclIsTypeOf(R2ML!AttributeFunctionTerm) and
+
+			i.contextArgument.oclIsTypeOf(R2ML!ObjectVariable) and
+
+			
+			R2ML!GenericAtom.allInstancesFrom('IN')->asSequence()->select(c | c.predicate.name = 'swrlb:member')->collect(c | c.arguments)->flatten()->excludes(i.contextArgument) and
+
+			R2ML!UniversallyQuantifiedFormula.allInstancesFrom('IN')->asSequence()->collect(c | c.variables)->flatten()->excludes(i.contextArgument)
+
+		)
+
+	to o : OCL!VariableExp (
+
+			referredVariable <- thisModule.Attribute2Variable(i.attribute)
+
+		)
+
+}
+
+
+
+rule TypedLiteralString2StringLiteralExp {
+
+	from i : R2ML!TypedLiteral(
+
+			i.oclIsTypeOf(R2ML!TypedLiteral) and
+
+			i.type.name = 'xs:string'
+
+		)
+
+	to o : OCL!StringLiteralExp (
+
+			stringSymbol <- i.lexicalValue
+
+		)
+
+}
+
+
+
+rule TypedLiteralInteger2IntegerLiteralExp {
+
+	from i : R2ML!TypedLiteral(
+
+			i.oclIsTypeOf(R2ML!TypedLiteral) and
+
+			i.type.name = 'xs:positiveInteger'
+
+		)
+
+	to o : OCL!IntegerLiteralExp (
+
+			integerSymbol <- i.lexicalValue.toInteger()
+
+		)
+
+} 
+
+
+
+rule TypedLiteralBoolean2BooleanLiteralExp {
+
+	from i : R2ML!TypedLiteral(
+
+			i.oclIsTypeOf(R2ML!TypedLiteral) and
+
+			i.type.name = 'xs:boolean'
+
+		)
+
+	to o : OCL!BooleanLiteralExp (
+
+			booleanSymbol <- i.lexicalValue.toBoolean()
+
+		)
+
+}

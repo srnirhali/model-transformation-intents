@@ -1,0 +1,959 @@
+
+
+module MySQL2KM3;
+
+create OUT : KM3 from IN : MySQL;
+
+
+
+
+
+
+
+helper def: dataBaseElt : MySQL!DataBase =
+
+	MySQL!DataBase.allInstances()->asSequence()->first();
+
+
+
+helper context String def: isStringType() : Boolean =
+
+	self = 'varchar';
+
+
+
+helper context String def: isIntegerType() : Boolean =
+
+	self = 'tinyint' or self = 'int';
+
+
+
+helper context String def: isDoubleType() : Boolean =
+
+	self = 'float' or self = 'double';
+
+
+
+helper context String def: isUnsupportedType() : Boolean =
+
+	self = 'date' or self = 'time' or self = 'blob' or self = 'longblob';
+
+
+
+helper context MySQL!Column
+
+		def: km3TypeExistsIn(s: Set(MySQL!Column)) : Boolean =
+
+	s->iterate(e; res: Boolean = false |
+
+		if self.type.isStringType()
+
+		then
+
+			if e.type.isStringType() or e.type.isUnsupportedType()
+
+			then
+
+				true
+
+			else
+
+				res
+
+			endif
+
+		else
+
+			if self.type.isIntegerType()
+
+			then
+
+				if e.type.isIntegerType()
+
+				then
+
+					true
+
+				else
+
+					res
+
+				endif
+
+			else
+
+				if self.type.isDoubleType()
+
+				then
+
+					if e.type.isDoubleType()
+
+					then
+
+						true
+
+					else
+
+						res
+
+					endif
+
+				else
+
+					if self.type.isUnsupportedType()
+
+					then
+
+						if e.type.isStringType() or e.type.isUnsupportedType()
+
+						then
+
+							true
+
+						else
+
+							res
+
+						endif
+
+					else
+
+						res
+
+					endif
+
+				endif
+
+			endif
+
+		endif
+
+	);
+
+
+
+helper context MySQL!Column def: isForeignKey : Boolean =
+
+	self.comment.size() <> 0;
+
+
+
+helper context MySQL!EnumItem
+
+		def: isDefinedIn(s: Set(MySQL!EnumItem)) : Boolean =
+
+	s->iterate(i; res: Boolean = false |
+
+		if self.name = i.name
+
+		then
+
+			true
+
+		else
+
+			res
+
+		endif
+
+	);
+
+
+
+helper context MySQL!EnumSet def: isEquivalentTo(e: MySQL!EnumSet) : Boolean =
+
+	if self.enumItems->size() <> e.enumItems->size()
+
+	then
+
+		false
+
+	else
+
+		self.enumItems->iterate(i; res: Boolean = true |
+
+			if i.isDefinedIn( e.enumItems )
+
+			then
+
+				res
+
+			else
+
+				false
+
+			endif
+
+		)	
+
+	endif;
+
+
+
+helper context MySQL!EnumSet
+
+		def: enumExistsIn(s: Sequence(MySQL!EnumSet)) : Boolean =
+
+	s->iterate(e; res: Boolean = false |
+
+		if e.isEquivalentTo(self)
+
+		then
+
+			true
+
+		else
+
+			res
+
+		endif
+
+	);
+
+
+
+helper def: enumSet : Sequence(MySQL!EnumSet) =
+
+	MySQL!EnumSet.allInstances()
+
+		->asSet()
+
+		->iterate(e; acc: Sequence(MySQL!EnumSet) = Sequence{} |
+
+			if not e.enumExistsIn(acc)
+
+			then
+
+				acc.append(e)
+
+			else
+
+				acc
+
+			endif
+
+		);
+
+
+
+helper def: dbTypeSet : Set(MySQL!Column) =
+
+	MySQL!Column.allInstances()
+
+		->select(c | c.type <> 'enum' and not c.isForeignKey)
+
+		->asSet();
+
+
+
+helper def: km3TypeSet : Set(MySQL!Column) =
+
+	thisModule.dbTypeSet
+
+		->iterate(c; acc: Set(MySQL!Column) = Set{} |
+
+			if not c.km3TypeExistsIn(acc)
+
+			then
+
+				acc.including(c)
+
+			else
+
+				acc
+
+			endif
+
+		);
+
+
+
+helper context String def: getTableNameRec() : String =
+
+	let char : String = self.substring(1 ,1) in
+
+	if char = ':'
+
+	then
+
+		''
+
+	else
+
+		char.concat( self.substring(2, self.size()).getTableNameRec() )
+
+	endif;
+
+
+
+helper context String def: getTableName() : String =
+
+	self.getTableNameRec();
+
+
+
+helper context MySQL!Column def: getReferredTable : MySQL!Table =
+
+	let t_name : String = self.comment.getTableName() in
+
+	MySQL!Table.allInstances()
+
+		->select(t | t.name = t_name)
+
+		->asSequence()->first();
+
+
+
+helper context String def: getKM3TypeName() : String =
+
+	if self.isStringType()
+
+	then
+
+		'String'
+
+	else
+
+		if self.isIntegerType()
+
+		then
+
+			'Integer'
+
+		else
+
+			if self.isDoubleType()
+
+			then
+
+				'Double'
+
+			else
+
+				
+				'String'
+
+			endif
+
+		endif
+
+	endif;
+
+
+
+
+
+
+
+rule Metamodel {
+
+	from
+
+        i : MySQL!DataBase
+
+	to
+
+		o : KM3!Metamodel (
+
+			location <- '',
+
+			contents <- Sequence{p, pt}
+
+		),
+
+		p : KM3!Package (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- OclUndefined,
+
+			metamodel <- o,
+
+			contents <- Sequence{}
+
+		),
+
+		pt : KM3!Package (
+
+			location <- '',
+
+			name <- 'PrimitiveTypes',
+
+			package <- OclUndefined,
+
+			metamodel <- o,
+
+			contents <- 
+
+				thisModule.km3TypeSet
+
+					->collect(e | thisModule.resolveTemp(e, 'd'))
+
+		)
+
+}
+
+
+
+
+
+rule Class1 {
+
+	from
+
+        i : MySQL!Table (
+
+        	not i.columns->exists(c | c.isForeignKey)
+
+        )
+
+	to
+
+		o : KM3!Class (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- thisModule.resolveTemp(thisModule.dataBaseElt, 'p'),
+
+			isAbstract <- false,
+
+			supertypes <- Set{},
+
+			structuralFeatures <-
+
+				Sequence{
+
+					i.columns->select(e | not e.isForeignKey),
+
+					MySQL!Column.allInstances()
+
+						->select(c |
+
+							c.isForeignKey and
+
+							not c.table.columns
+
+								->exists(e | not e.isForeignKey) and
+
+							c.table.columns->size() > 2)
+
+						->select(c | c.getReferredTable = i)
+
+						->collect(r | thisModule.resolveTemp(r, 'o2')),
+
+					MySQL!Column.allInstances()
+
+						->select(c |
+
+							c.isForeignKey and
+
+							not c.table.columns->exists(e | not e.isForeignKey) and
+
+							c.table.columns->size() = 2)
+
+						->select(c | c.getReferredTable = i)
+
+				}->flatten(),
+
+			operations <- Sequence{}
+
+		)
+
+}
+
+
+
+
+
+rule Class2 {
+
+	from
+
+        i : MySQL!Table (
+
+        	i.columns->exists(c | c.isForeignKey) and
+
+        	i.columns->exists(c | not c.isForeignKey)
+
+        )
+
+	to
+
+		o : KM3!Class (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- thisModule.resolveTemp(thisModule.dataBaseElt, 'p'),
+
+			isAbstract <- false,
+
+			supertypes <- Set{},
+
+			structuralFeatures <-
+
+				Sequence{
+
+					i.columns,
+
+					MySQL!Column.allInstances()
+
+						->select(c |
+
+							c.isForeignKey and
+
+							not c.table.columns
+
+								->exists(e | not e.isForeignKey) and
+
+							c.table.columns->size() > 2)
+
+						->select(c | c.getReferredTable = i)
+
+						->collect(r | thisModule.resolveTemp(r, 'o2')),
+
+					MySQL!Column.allInstances()
+
+						->select(c |
+
+							c.isForeignKey and
+
+							not c.table.columns->exists(e | not e.isForeignKey) and
+
+							c.table.columns->size() = 2)
+
+						->select(c | c.getReferredTable = i)
+
+				}->flatten(),
+
+			operations <- Sequence{}
+
+		)
+
+}
+
+
+
+
+
+rule Class3 {
+
+	from
+
+        i : MySQL!Table (
+
+			not i.columns->exists(c | not c.isForeignKey) and
+
+			i.columns->size() > 2
+
+        )
+
+	to
+
+		o : KM3!Class (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- thisModule.resolveTemp(thisModule.dataBaseElt, 'p'),
+
+			isAbstract <- false,
+
+			supertypes <- Set{},
+
+			structuralFeatures <- i.columns,
+
+			operations <- Sequence{}
+
+		)
+
+}
+
+
+
+
+
+rule Attribute1 {
+
+	from
+
+        i : MySQL!Column (
+
+        	not i.isForeignKey and
+
+			not thisModule.km3TypeSet->exists(c | c = i)
+
+        )
+
+	to
+
+		o : KM3!Attribute (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- OclUndefined,
+
+			lower <- 1,
+
+			upper <- 1,
+
+			isOrdered <- false,
+
+			isUnique <- false,
+
+			type <-
+
+				if i.type = 'enum'
+
+				then
+
+					thisModule.enumSet
+
+						->select(e | e.isEquivalentTo(i.enumSet))
+
+						->asSequence()->first()
+
+				else
+
+					thisModule.resolveTemp(
+
+						thisModule.km3TypeSet
+
+							->select(e |
+
+								e.type.getKM3TypeName() = i.type.getKM3TypeName())
+
+							->asSequence()->first(),
+
+						'd'
+
+					)
+
+				endif,
+
+			owner <- i.table,
+
+			subsetOf <- Set{},
+
+			derivedFrom <- Set{}
+
+		)
+
+}
+
+
+
+
+
+rule Attribute2 {
+
+	from
+
+        i : MySQL!Column (
+
+        	not i.isForeignKey and
+
+			thisModule.km3TypeSet->exists(c | c = i)
+
+        )
+
+	to
+
+		o : KM3!Attribute (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- OclUndefined,
+
+			lower <- 1,
+
+			upper <- 1,
+
+			isOrdered <- false,
+
+			isUnique <- false,
+
+			type <- d,
+
+			owner <- i.table,
+
+			subsetOf <- Set{},
+
+			derivedFrom <- Set{}
+
+		),
+
+		d : KM3!DataType (
+
+			location <- '',
+
+			name <- i.type.getKM3TypeName(),
+
+			package <- thisModule.resolveTemp(thisModule.dataBaseElt, 'pt')
+
+		)
+
+}
+
+
+
+
+
+rule Reference1 {
+
+	from
+
+        i : MySQL!Column (
+
+        	i.isForeignKey and
+
+			i.table.columns->exists(c | not c.isForeignKey)
+
+        )
+
+	to
+
+		o : KM3!Reference (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- OclUndefined,
+
+			lower <- 1,
+
+			upper <- 1,
+
+			isOrdered <- false,
+
+			isUnique <- false,
+
+			type <- i.getReferredTable,
+
+			owner <- i.table,
+
+			subsetOf <- Set{},
+
+			derivedFrom <- Set{},
+
+			isContainer <- false,
+
+			opposite <- OclUndefined
+
+		)
+
+}
+
+
+
+
+
+rule Reference2 {
+
+	from
+
+        i : MySQL!Column (
+
+        	i.isForeignKey and
+
+			not i.table.columns->exists(c | not c.isForeignKey) and
+
+			i.table.columns->size() = 2
+
+        )
+
+	to
+
+		o : KM3!Reference (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- OclUndefined,
+
+			lower <- 0,
+
+			upper <- 0-1,
+
+			isOrdered <- false,
+
+			isUnique <- false,
+
+			type <- i.getReferredTable,
+
+			owner <-
+
+				i.table.columns
+
+					->select(c | c <> i)
+
+					->asSequence()->first().getReferredTable,
+
+			subsetOf <- Set{},
+
+			derivedFrom <- Set{},
+
+			isContainer <- false,
+
+			opposite <-
+
+				i.table.columns->select(c | c <> i)->asSequence()->first()
+
+		)
+
+}
+
+
+
+
+
+rule Reference3 {
+
+	from
+
+        i : MySQL!Column (
+
+        	i.isForeignKey and
+
+			not i.table.columns->exists(c | not c.isForeignKey) and
+
+			i.table.columns->size() > 2
+
+        )
+
+	to
+
+		
+		o1 : KM3!Reference (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- OclUndefined,
+
+			lower <- 0,
+
+			upper <- 0-1,
+
+			isOrdered <- false,
+
+			isUnique <- false,
+
+			type <- i.getReferredTable,
+
+			owner <- i.table,
+
+			subsetOf <- Set{},
+
+			derivedFrom <- Set{},
+
+			isContainer <- false,
+
+			opposite <- o2
+
+		),
+
+		
+		o2 : KM3!Reference (
+
+			location <- '',
+
+			name <- i.table.name,
+
+			package <- OclUndefined,
+
+			lower <- 0,
+
+			upper <- 0-1,
+
+			isOrdered <- false,
+
+			isUnique <- false,
+
+			type <- i.table,
+
+			owner <- i.getReferredTable,
+
+			subsetOf <- Set{},
+
+			derivedFrom <- Set{},
+
+			isContainer <- false,
+
+			opposite <- o1
+
+		)
+
+}
+
+
+
+
+
+rule Enumeration {
+
+	from
+
+        i : MySQL!EnumSet (
+
+        	thisModule.enumSet->exists(e | e = i)
+
+        )
+
+	to
+
+		o : KM3!Enumeration (
+
+			location <- '',
+
+			name <- 'Enum_'.concat(thisModule.enumSet->indexOf(i).toString()),
+
+			package <- thisModule.resolveTemp(thisModule.dataBaseElt, 'p'),
+
+			literals <- i.enumItems
+
+		)
+
+}
+
+
+
+
+
+rule EnumLiteral {
+
+	from
+
+        i : MySQL!EnumItem (
+
+        	thisModule.enumSet->exists(e | e = i.enumSet)
+
+        )
+
+	to
+
+		o : KM3!EnumLiteral (
+
+			location <- '',
+
+			name <- i.name,
+
+			package <- OclUndefined
+
+		)
+
+}
+

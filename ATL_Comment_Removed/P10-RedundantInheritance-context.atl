@@ -1,0 +1,242 @@
+
+
+module RedundantInheritance; 
+
+create OUT : KM3target from IN : KM3;
+
+
+
+helper context KM3!Class def : getSuperTypes : Sequence(KM3!Class) =
+
+	self.supertypes->iterate(a; acc:Sequence(KM3!Class)=Sequence{}|
+
+						if self.getAllSuperTypes->count(a)>1											
+
+						then acc->union(Sequence{})
+
+						else acc->append(a)
+
+						endif 
+
+	);
+
+
+
+helper context KM3!Class def: getAllSuperTypes : Sequence(KM3!Class) =
+
+	if self.supertypes->isEmpty()
+
+		then Sequence{}	
+
+	else 		self.supertypes->select(c | c.supertypes->notEmpty())
+
+					->iterate(a; acc : Sequence(KM3!Class)=Sequence{} |(acc->including(a.getSuperTypes)))
+
+					->union(
+
+					self.supertypes->iterate(a; acc : Sequence(KM3!Class)=Sequence{} | acc->including(a))
+
+			).flatten()
+
+	endif;
+
+	
+
+rule Metamodel {
+
+	from
+
+		inputMm:KM3!Metamodel
+
+	to
+
+		outputMm:KM3target!Metamodel (
+
+			location <- inputMm.location,
+
+			contents <- inputMm.contents
+
+		)
+
+}
+
+
+
+rule Package {
+
+	from
+
+		inputPkg:KM3!Package
+
+	to
+
+		outputPkg:KM3target!Package (
+
+			name <- inputPkg.name,
+
+			contents <- inputPkg.contents
+
+		)
+
+}
+
+
+
+rule Class {
+
+	from
+
+		inputA:KM3!Class 
+
+	to
+
+		outputA:KM3target!Class (
+
+			name <- inputA.name,
+
+			isAbstract <- inputA.isAbstract,
+
+			structuralFeatures <- inputA.structuralFeatures,
+
+			supertypes <- inputA.getSuperTypes
+
+		)
+
+}
+
+
+
+rule attribute {
+
+	from
+
+		inputAtt:KM3!Attribute 
+
+	to
+
+		outputAtt:KM3target!Attribute(
+
+			name <- inputAtt.name,
+
+			isOrdered <- inputAtt.isOrdered,
+
+			isUnique <- inputAtt.isUnique,
+
+			location <- inputAtt.location,
+
+			lower <- inputAtt.lower,
+
+			upper <- inputAtt.upper,
+
+			type <- inputAtt.type,
+
+			owner <- inputAtt.owner
+
+			
+
+		)
+
+}
+
+
+
+rule DataType {
+
+from
+
+		inputData:KM3!DataType
+
+	to
+
+		outputData:KM3target!DataType(
+
+			name <- inputData.name,
+
+			location <- inputData.location
+
+		)
+
+}
+
+
+
+rule reference {
+
+	from
+
+		inputRef:KM3!Reference 
+
+	to
+
+		outputRef:KM3target!Reference (
+
+			name <- inputRef.name,
+
+			isOrdered <- inputRef.isOrdered,
+
+			isUnique <- inputRef.isUnique,
+
+			location <- inputRef.location,
+
+			lower <- inputRef.lower,
+
+			upper <- inputRef.upper,
+
+			type <- inputRef.type,
+
+			owner <- inputRef.owner,
+
+			opposite <- inputRef.opposite
+
+		)
+
+}
+
+
+
+rule enumeration {
+
+	from
+
+		inputEnum:KM3!Enumeration 
+
+	to
+
+		outputEnum:KM3target!Enumeration (
+
+			location <- inputEnum.location,
+
+			name  <- inputEnum.name,
+
+			package  <- inputEnum.package
+
+		)
+
+
+
+}
+
+
+
+rule literal {
+
+	from
+
+		inputEnum:KM3!EnumLiteral
+
+	to
+
+		outputEnum:KM3target!EnumLiteral (
+
+			location <- inputEnum.location,
+
+			name  <- inputEnum.name,
+
+			enum  <- inputEnum.enum
+
+		)
+
+
+
+}
+

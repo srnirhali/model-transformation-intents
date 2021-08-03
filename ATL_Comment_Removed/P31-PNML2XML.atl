@@ -1,0 +1,411 @@
+module PNML2XML;
+
+create OUT : XML from IN : PNML;
+
+
+
+helper def: getRoot() : PNML!PNMLDocument =
+
+	PNML!PNMLDocument.allInstances()->asSequence()->first();
+
+
+
+
+
+rule Root {
+
+	from
+
+		n : PNML!PNMLDocument
+
+	to
+
+		e : XML!Root
+
+		(
+
+			name <- 'pnml',
+
+			
+			value <- n.nets.first().name.labels.first().text,
+
+			children <- Sequence {document_name, document_xmlns, document_net}
+
+		),
+
+		document_name : XML!Element
+
+		(
+
+			name <- 'name',
+
+			parent <- n,
+
+			children <- document_text
+
+		),
+
+		document_text : XML!Element
+
+		(
+
+			name <- 'text',
+
+			parent <- document_name,
+
+			children <- document_xml_text
+
+		),
+
+		document_xml_text : XML!Text
+
+		(
+
+			value <- n.nets.first().name.labels.first().text,
+
+			parent <- document_text
+
+		),		
+
+		document_xmlns : XML!Attribute
+
+		(
+
+			name <- 'xmlns',
+
+			value <- n.xmlns.value,
+
+			parent <- n
+
+		),
+
+		document_net : XML!Element
+
+		(
+
+			name <-'net',
+
+			value <- n.nets.first().name.labels.first().text,
+
+			parent <- n,
+
+			children <- Sequence {net_name, net_id, net_type}
+
+		),
+
+		net_name : XML!Element
+
+		(
+
+			name <- 'name',
+
+			parent <- document_net,
+
+			children <- net_text
+
+		),
+
+		net_text : XML!Element
+
+		(
+
+			name <- 'text',
+
+			parent <- net_name,
+
+			children <- net_xml_text
+
+		),
+
+		net_xml_text : XML!Text
+
+		(
+
+			value <- n.nets.first().name.labels.first().text,
+
+			parent <- net_text
+
+		),
+
+		net_id : XML!Attribute
+
+		(
+
+			name <- 'id',
+
+			value <- n.nets.first().id,
+
+			parent <- document_net
+
+		),
+
+		net_type : XML!Attribute
+
+		(
+
+			name <-'type',
+
+			value <- n.nets.first().type.value,
+
+			parent <- document_net
+
+		)
+
+}
+
+
+
+rule Place {
+
+	from
+
+		n : PNML!NetContentElement
+
+		(
+
+			n.oclIsKindOf(PNML!Place)
+
+		)		
+
+	to
+
+		place : XML!Element
+
+		(
+
+			name <- 'place',
+
+			value <- n.name.labels.first().text,
+
+			parent <- thisModule.resolveTemp(thisModule.getRoot(), 'document_net'),
+
+			children <- Sequence{place_id, place_name}
+
+		),
+
+		place_id : XML!Attribute
+
+		(
+
+			name <- 'id',
+
+			value <- n.id,
+
+			parent <- n
+
+		),
+
+		place_name : XML!Element
+
+		(
+
+			name <- 'name',
+
+			parent <- n,
+
+			children <- place_text
+
+		),
+
+		place_text : XML!Element
+
+		(
+
+			name <- 'text',
+
+			parent <- place_name,
+
+			children <- place_xml_text
+
+		),
+
+		place_xml_text : XML!Text
+
+		(
+
+			value <- n.name.labels.first().text,
+
+			parent <- place_text
+
+		)
+
+
+
+}
+
+
+
+rule Transition {
+
+	from
+
+		n : PNML!NetContentElement
+
+		(
+
+			n.oclIsKindOf(PNML!Transition)
+
+		)
+
+	to
+
+		transition : XML!Element
+
+		(
+
+			name <- 'transition',
+
+			value <- n.name.labels.first().text,
+
+			parent <- thisModule.resolveTemp(thisModule.getRoot(), 'document_net'),
+
+			children <- Sequence{transition_id, transition_name}
+
+		),
+
+		transition_id : XML!Attribute
+
+		(
+
+			name <- 'id',
+
+			value <- n.id,
+
+			parent <- n
+
+		),
+
+		transition_name : XML!Element
+
+		(
+
+			name <- 'name',
+
+			parent <- n,
+
+			children <- transition_text
+
+		),
+
+		transition_text : XML!Element
+
+		(
+
+			name <- 'text',
+
+			parent <- transition_name,
+
+			children <- transition_xml_text
+
+		),
+
+		transition_xml_text : XML!Text
+
+		(
+
+			value <- n.name.labels.first().text,
+
+			parent <- transition_text
+
+		)
+
+		
+
+}
+
+
+
+rule Arc {
+
+	from
+
+		n : PNML!Arc
+
+	to
+
+		arc : XML!Element
+
+		(
+
+			name <- 'arc',
+
+			value <- n.name.labels.first().text,
+
+			parent <- thisModule.resolveTemp(thisModule.getRoot(), 'document_net'),
+
+			children <- Sequence {arc_name, arc_id, source, target}
+
+		),
+
+		arc_id : XML!Attribute
+
+		(
+
+			name <- 'id',
+
+			value <- n.id,
+
+			parent <- n
+
+		),
+
+		arc_name : XML!Element
+
+		(
+
+			name <- 'name',
+
+			parent <- n,
+
+			children <- arc_text
+
+		),
+
+		arc_text : XML!Element
+
+		(
+
+			name <- 'text',
+
+			parent <- arc_name,
+
+			children <- arc_xml_text
+
+		),
+
+		arc_xml_text : XML!Text
+
+		(
+
+			value <- n.name.labels.first().text,
+
+			parent <- arc_text
+
+		),
+
+		
+		source : XML!Attribute
+
+		(
+
+			name <- 'source',
+
+			value <- n.source.id,
+
+			parent <- n
+
+		),
+
+		target : XML!Attribute
+
+		(
+
+			name <- 'target',
+
+			value <- n.target.id,
+
+			parent <- n
+
+		)
+
+}

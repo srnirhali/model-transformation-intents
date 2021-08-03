@@ -1,0 +1,98 @@
+module PetriNet2PathExp;
+
+create OUT : PathExp from IN : PetriNet;
+
+
+
+
+
+
+
+rule Main {
+
+	from
+
+        pn : PetriNet!PetriNet
+
+	to 
+
+		pe : PathExp!PathExp (
+
+			name <- pn.name,
+
+			states <- pn.places,
+
+			transitions <- pn.transitions
+
+		)
+
+}
+
+
+
+
+
+rule Place {
+
+	from
+
+        pn_p : PetriNet!Place
+
+	to 
+
+		pe_s : PathExp!State (
+
+			incoming <- pn_p.incoming
+
+							->collect(e | e.source)
+
+							->flatten(),
+
+			outgoing <- pn_p.outgoing
+
+							->collect(e | e.target)
+
+							->flatten()
+
+		)
+
+}
+
+
+
+
+
+rule Transition {
+
+	from
+
+        pn_t : PetriNet!Transition
+
+	to 
+
+		pe_t : PathExp!Transition (
+
+			name <- '',
+
+			source <- pn_t.incoming
+
+						->collect(e | e.source)
+
+						->flatten()
+
+						->first(),
+
+			target <- pn_t.outgoing
+
+						->collect(e | e.target)
+
+						->flatten()
+
+						->first()
+
+		)
+
+}
+
+
+
